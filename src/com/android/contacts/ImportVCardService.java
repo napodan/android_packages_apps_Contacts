@@ -254,7 +254,9 @@ public class ImportVCardService extends Service {
                 // at once. In the worst case, a user may call cancel() just before recreating
                 // mVCardParser.
                 synchronized (this) {
-                    mVCardParser = new VCardParser_V21(vcardType, charset);
+                    // TODO: ensure this change works fine.
+                    // mVCardParser = new VCardParser_V21(vcardType, charset);
+                    mVCardParser = new VCardParser_V21(vcardType);
                     if (mCanceled) {
                         mVCardParser.cancel();
                     }
@@ -274,7 +276,8 @@ public class ImportVCardService extends Service {
                     is = mResolver.openInputStream(uri);
 
                     synchronized (this) {
-                        mVCardParser = new VCardParser_V30(vcardType, charset);
+                        // mVCardParser = new VCardParser_V30(vcardType, charset);
+                        mVCardParser = new VCardParser_V30(vcardType);
                         if (mCanceled) {
                             mVCardParser.cancel();
                         }
