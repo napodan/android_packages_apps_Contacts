@@ -147,9 +147,11 @@ public class ExportVCardActivity extends Activity {
                     return;
                 }
 
-                // composer = new VCardComposer(ExportVCardActivity.this, mVCardTypeStr, true);
-                int vcardType = VCardConfig.VCARD_TYPE_V30_GENERIC;
+                final int vcardType = VCardConfig.getVCardTypeFromString(mVCardTypeStr);
                 composer = new VCardComposer(ExportVCardActivity.this, vcardType, true);
+                /*int vcardType = (VCardConfig.VCARD_TYPE_V21_GENERIC |
+                        VCardConfig.FLAG_USE_QP_TO_PRIMARY_PROPERTIES);
+                composer = new VCardComposer(ExportVCardActivity.this, vcardType, true);*/
 
                 composer.addHandler(composer.new HandlerForOutputStream(outputStream));
 
