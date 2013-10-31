@@ -244,7 +244,7 @@
         </activity>
 
         <!-- The contacts search/filter UI -->
-        <activity android:name="ContactsListActivity$ContactsSearchActivity"
+        <activity android:name="ContactsSearchActivity"
             android:theme="@style/ContactsSearchTheme"
             android:windowSoftInputMode="stateAlwaysVisible|adjustPan"
         >
