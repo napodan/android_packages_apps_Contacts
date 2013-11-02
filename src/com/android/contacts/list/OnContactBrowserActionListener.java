@@ -13,21 +13,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.android.contacts;
+package com.android.contacts.list;
+
+import android.net.Uri;
 
 /**
- * An interface that captures various top-level actions that can be performed in
- * the Contacts app.  This is a temporary class to be replaced by individual
- * listeners for various actions.
+ * Action callbacks that can be sent by a contact browser.
  */
-@Deprecated
-public interface ContactsApplicationController {
+public interface OnContactBrowserActionListener  {
 
     /**
-     * This is a temporary bridge to the ContactsListActivity indended to be used ONLY
-     * during the refactoring phase.
+     * Search all contacts for the specified string an show results for browsing.
      */
-    @Deprecated
-    public void onListItemClick(int position, long id);
+    void onSearchAllContactsAction(String string);
 
+    /**
+     * Open the specified contact for viewing.
+     */
+    void onViewContactAction(Uri contactLookupUri);
+
+    /**
+     * Create a new contact.
+     */
+    void onCreateNewContactAction();
+
+    /**
+     * Edit the specified contact.
+     */
+    void onEditContactAction(Uri contactLookupUri);
 }
