@@ -24,9 +24,9 @@ import android.widget.ListAdapter;
 /**
  * Configuration for the default contact list.
  */
-public class DefaultContactListConfiguration extends ContactEntryListConfiguration {
+public class MainContactListConfiguration extends ContactEntryListConfiguration {
 
-    public DefaultContactListConfiguration(Context context,
+    public MainContactListConfiguration(Context context,
             ContactsApplicationController applicationController) {
         super(context, applicationController);
     }
@@ -36,12 +36,12 @@ public class DefaultContactListConfiguration extends ContactEntryListConfigurati
         ContactItemListAdapter adapter =
                 new ContactItemListAdapter((ContactsListActivity)getContext());
         adapter.setSectionHeaderDisplayEnabled(isSectionHeaderDisplayEnabled());
-        adapter.setDisplayPhotos(isPhotoLoaderEnabled());
+        adapter.setDisplayPhotos(true);
         return adapter;
     }
 
     @Override
     public ContactEntryListController createController() {
-        return new DefaultContactListController(getContext(), getApplicationController());
+        return new MainContactListController(getContext(), getApplicationController());
     }
 }

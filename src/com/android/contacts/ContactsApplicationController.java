@@ -13,30 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.android.contacts.list;
-
-import android.content.Context;
+package com.android.contacts;
 
 /**
- * Common base class for various contact-related lists, e.g. contact list, phone number list
- * etc.
+ * An interface that captures various top-level actions that can be performed in
+ * the Contacts app.
  */
-public abstract class ContactEntryListAdapter extends PinnedHeaderListAdapter {
+public interface ContactsApplicationController {
 
-    public ContactEntryListAdapter(Context context) {
-        super(context);
-    }
-
-    public Context getContext() {
-        return mContext;
-    }
-
-    /*
-     * TODO change this method when loaders are introduced.
+    /**
+     * This is a temporary bridge to the ContactsListActivity indended to be used ONLY
+     * during the refactoring phase.
      */
-    @Override
     @Deprecated
-    public void onContentChanged() {
-        super.onContentChanged();
-    }
+    public void onListItemClick(int position, long id);
+
 }
