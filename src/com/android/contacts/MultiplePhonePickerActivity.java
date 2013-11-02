@@ -19,6 +19,7 @@ package com.android.contacts;
 import com.android.contacts.list.MultiplePhoneExtraAdapter;
 import com.android.contacts.list.MultiplePhonePickerAdapter;
 import com.android.contacts.list.MultiplePhonePickerConfiguration;
+import com.android.contacts.list.MultiplePhonePickerItemView;
 import com.android.contacts.list.MultiplePhoneSelection;
 
 import android.app.ProgressDialog;
@@ -45,6 +46,7 @@ import android.view.View.OnClickListener;
 import android.view.animation.AnimationUtils;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.ListView;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -108,11 +110,12 @@ public class MultiplePhonePickerActivity extends ContactsListActivity {
 
     public OnClickListener mCheckBoxClickerListener = new OnClickListener () {
         public void onClick(View v) {
-            final ContactListItemCache cache = (ContactListItemCache) v.getTag();
-            if (cache.phoneId != MultiplePhoneExtraAdapter.INVALID_PHONE_ID) {
-                mUserSelection.setPhoneSelected(cache.phoneId, ((CheckBox) v).isChecked());
+            final MultiplePhonePickerItemView itemView =
+                    (MultiplePhonePickerItemView) v.getParent();
+            if (itemView.phoneId != MultiplePhoneExtraAdapter.INVALID_PHONE_ID) {
+                mUserSelection.setPhoneSelected(itemView.phoneId, ((CheckBox) v).isChecked());
             } else {
-                mUserSelection.setPhoneSelected(cache.phoneNumber,
+                mUserSelection.setPhoneSelected(itemView.phoneNumber,
                         ((CheckBox) v).isChecked());
             }
             updateWidgets(true);
@@ -128,8 +131,8 @@ public class MultiplePhonePickerActivity extends ContactsListActivity {
     @Override
     public void initContentView() {
         super.initContentView();
-        ((MultiplePhonePickerAdapter)getListView().getAdapter())
-                .setExtraAdapter(mPhoneNumberAdapter);
+        ListView listView = (ListView)findViewById(android.R.id.list);
+        ((MultiplePhonePickerAdapter)listView.getAdapter()).setExtraAdapter(mPhoneNumberAdapter);
         ViewStub stub = (ViewStub)findViewById(R.id.footer_stub);
         if (stub != null) {
             View stubView = stub.inflate();
@@ -160,7 +163,8 @@ public class MultiplePhonePickerActivity extends ContactsListActivity {
     @Override
     protected void onSaveInstanceState(Bundle icicle) {
         super.onSaveInstanceState(icicle);
-        if (mList != null) {
+        ListView listView = (ListView)findViewById(android.R.id.list);
+        if (listView != null) {
             if (mUserSelection != null) {
                 mUserSelection.saveInstanceState(icicle);
             }

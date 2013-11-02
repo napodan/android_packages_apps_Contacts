@@ -15,10 +15,8 @@
  */
 package com.android.contacts.list;
 
-import com.android.contacts.ContactListItemView;
 import com.android.contacts.ContactsListActivity;
 import com.android.contacts.MultiplePhonePickerActivity;
-import com.android.contacts.ContactsListActivity.ContactListItemCache;
 
 import android.content.Context;
 import android.database.Cursor;
@@ -73,17 +71,15 @@ public class MultiplePhonePickerAdapter extends ContactItemListAdapter {
 
     @Override
     public View newView(Context context, Cursor cursor, ViewGroup parent) {
-        final ContactListItemView view = new ContactListItemView(context, null);
+        final MultiplePhonePickerItemView view = new MultiplePhonePickerItemView(context, null);
         view.setOnCallButtonClickListener(mMultiplePhonePickerActivity);
         view.setOnCheckBoxClickListener(mMultiplePhonePickerActivity.mCheckBoxClickerListener);
-        view.setTag(new MultiplePhonePickerActivity.ContactListItemCache());
         return view;
     }
 
     @Override
     public void bindView(View itemView, Context context, Cursor cursor) {
-        final ContactListItemView view = (ContactListItemView)itemView;
-        final ContactListItemCache cache = (ContactListItemCache)view.getTag();
+        final MultiplePhonePickerItemView view = (MultiplePhonePickerItemView)itemView;
 
         int typeColumnIndex;
         int dataColumnIndex;
@@ -93,7 +89,6 @@ public class MultiplePhonePickerAdapter extends ContactItemListAdapter {
         int phoneticNameColumnIndex;
         int photoColumnIndex = ContactsListActivity.SUMMARY_PHOTO_ID_COLUMN_INDEX;
         boolean displayAdditionalData = mDisplayAdditionalData;
-        boolean highlightingEnabled = false;
         nameColumnIndex = ContactsListActivity.PHONE_DISPLAY_NAME_COLUMN_INDEX;
         phoneticNameColumnIndex = -1;
         dataColumnIndex = ContactsListActivity.PHONE_NUMBER_COLUMN_INDEX;
@@ -102,31 +97,19 @@ public class MultiplePhonePickerAdapter extends ContactItemListAdapter {
         defaultType = Phone.TYPE_HOME;
         photoColumnIndex = ContactsListActivity.PHONE_PHOTO_ID_COLUMN_INDEX;
 
-        cache.phoneId = Long.valueOf(cursor.getLong(ContactsListActivity.PHONE_ID_COLUMN_INDEX));
+        view.phoneId = Long.valueOf(cursor.getLong(ContactsListActivity.PHONE_ID_COLUMN_INDEX));
         CheckBox checkBox = view.getCheckBoxView();
-        checkBox.setChecked(mMultiplePhonePickerActivity.mUserSelection
-                .isSelected(cache.phoneId));
-        checkBox.setTag(cache);
+        checkBox.setChecked(mMultiplePhonePickerActivity.mUserSelection.isSelected(view.phoneId));
         int color = mMultiplePhonePickerActivity.getChipColor(cursor
                 .getLong(ContactsListActivity.PHONE_CONTACT_ID_COLUMN_INDEX));
         view.getChipView().setBackgroundResource(color);
 
         // Set the name
-        cursor.copyStringToBuffer(nameColumnIndex, cache.nameBuffer);
+        cursor.copyStringToBuffer(nameColumnIndex, view.nameBuffer);
         TextView nameView = view.getNameTextView();
-        int size = cache.nameBuffer.sizeCopied;
+        int size = view.nameBuffer.sizeCopied;
         if (size != 0) {
-            if (highlightingEnabled) {
-                if (cache.textWithHighlighting == null) {
-                    cache.textWithHighlighting =
-                            mMultiplePhonePickerActivity.mHighlightingAnimation
-                                    .createTextWithHighlighting();
-                }
-                buildDisplayNameWithHighlighting(nameView, cursor, cache.nameBuffer,
-                        cache.highlightedTextBuffer, cache.textWithHighlighting);
-            } else {
-                nameView.setText(cache.nameBuffer.data, 0, size);
-            }
+            nameView.setText(view.nameBuffer.data, 0, size);
         } else {
             nameView.setText(mUnknownNameText);
         }
@@ -161,10 +144,10 @@ public class MultiplePhonePickerAdapter extends ContactItemListAdapter {
             if (phoneticNameColumnIndex != -1) {
 
                 // Set the name
-                cursor.copyStringToBuffer(phoneticNameColumnIndex, cache.phoneticNameBuffer);
-                int phoneticNameSize = cache.phoneticNameBuffer.sizeCopied;
+                cursor.copyStringToBuffer(phoneticNameColumnIndex, view.phoneticNameBuffer);
+                int phoneticNameSize = view.phoneticNameBuffer.sizeCopied;
                 if (phoneticNameSize != 0) {
-                    view.setLabel(cache.phoneticNameBuffer.data, phoneticNameSize);
+                    view.setLabel(view.phoneticNameBuffer.data, phoneticNameSize);
                 } else {
                     view.setLabel(null);
                 }
@@ -175,10 +158,10 @@ public class MultiplePhonePickerAdapter extends ContactItemListAdapter {
         }
 
         // Set the data.
-        cursor.copyStringToBuffer(dataColumnIndex, cache.dataBuffer);
+        cursor.copyStringToBuffer(dataColumnIndex, view.dataBuffer);
 
-        size = cache.dataBuffer.sizeCopied;
-        view.setData(cache.dataBuffer.data, size);
+        size = view.dataBuffer.sizeCopied;
+        view.setData(view.dataBuffer.data, size);
 
         // Set the label.
         if (!cursor.isNull(typeColumnIndex)) {

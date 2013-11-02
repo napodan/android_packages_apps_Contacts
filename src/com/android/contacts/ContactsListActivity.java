@@ -16,7 +16,6 @@
 
 package com.android.contacts;
 
-import com.android.contacts.TextHighlightingAnimation.TextWithHighlighting;
 import com.android.contacts.list.ContactEntryListAdapter;
 import com.android.contacts.list.ContactEntryListConfiguration;
 import com.android.contacts.list.ContactItemListAdapter;
@@ -28,12 +27,12 @@ import com.android.contacts.ui.ContactsPreferencesActivity;
 import com.android.contacts.ui.ContactsPreferencesActivity.Prefs;
 import com.android.contacts.util.AccountSelectionUtil;
 import com.android.contacts.util.Constants;
+import com.android.contacts.widget.TextWithHighlighting;
 
 import android.accounts.Account;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
-import android.app.ListActivity;
 import android.app.SearchManager;
 import android.content.AsyncQueryHandler;
 import android.content.ContentResolver;
@@ -44,7 +43,6 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.UriMatcher;
-import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.database.CharArrayBuffer;
 import android.database.ContentObserver;
@@ -83,7 +81,6 @@ import android.provider.ContactsContract.CommonDataKinds.StructuredPostal;
 import android.provider.ContactsContract.Intents.Insert;
 import android.telephony.TelephonyManager;
 import android.text.Editable;
-import android.text.Html;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.util.Log;
@@ -123,7 +120,7 @@ import java.util.Random;
  * Displays a list of contacts. Usually is embedded into the ContactsActivity.
  */
 @SuppressWarnings("deprecation")
-public class ContactsListActivity extends ListActivity implements View.OnCreateContextMenuListener,
+public class ContactsListActivity extends Activity implements View.OnCreateContextMenuListener,
         View.OnClickListener, View.OnKeyListener, TextWatcher, TextView.OnEditorActionListener,
         OnFocusChangeListener, OnTouchListener, OnScrollListener, ContactsApplicationController {
 
@@ -148,8 +145,6 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
     private static final int SUBACTIVITY_DISPLAY_GROUP = 3;
     private static final int SUBACTIVITY_SEARCH = 4;
     protected static final int SUBACTIVITY_FILTER = 5;
-
-    private static final int TEXT_HIGHLIGHTING_ANIMATION_DURATION = 350;
 
     public static final String AUTHORITIES_FILTER_KEY = "authorities";
 
@@ -443,51 +438,11 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
         }
     }
 
-    /**
-     * A {@link TextHighlightingAnimation} that redraws just the contact display name in a
-     * list item.
-     */
-    private static class NameHighlightingAnimation extends TextHighlightingAnimation {
-        private final ListView mListView;
-
-        private NameHighlightingAnimation(ListView listView, int duration) {
-            super(duration);
-            this.mListView = listView;
-        }
-
-        /**
-         * Redraws all visible items of the list corresponding to contacts
-         */
-        @Override
-        protected void invalidate() {
-            int childCount = mListView.getChildCount();
-            for (int i = 0; i < childCount; i++) {
-                View itemView = mListView.getChildAt(i);
-                if (itemView instanceof ContactListItemView) {
-                    final ContactListItemView view = (ContactListItemView)itemView;
-                    view.getNameTextView().invalidate();
-                }
-            }
-        }
-
-        @Override
-        protected void onAnimationStarted() {
-            mListView.setScrollingCacheEnabled(false);
-        }
-
-        @Override
-        protected void onAnimationEnded() {
-            mListView.setScrollingCacheEnabled(true);
-        }
-    }
-
     // The size of a home screen shortcut icon.
     private int mIconSize;
     private ContactsPreferences mContactsPrefs;
     public int mDisplayOrder;
     private int mSortOrder;
-    public boolean mHighlightWhenScrolling;
-    public TextHighlightingAnimation mHighlightingAnimation;
     private SearchEditText mSearchEditText;
 
     private ContentObserver mProviderStatusObserver = new ContentObserver(new Handler()) {
@@ -500,6 +455,8 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
 
     private ContactsIntentResolver mIntentResolver;
     protected ContactEntryListConfiguration mConfig;
+
+    private ListView mListView;
 
     public ContactsListActivity() {
         mIntentResolver = new ContactsIntentResolver(this, this);
@@ -568,24 +525,15 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
     }
 
     public void initContentView() {
-        if (mSearchMode) {
-            setContentView(R.layout.contacts_search_content);
-        } else if (mSearchResultsMode) {
-            setContentView(R.layout.contacts_list_search_results);
-            TextView titleText = (TextView)findViewById(R.id.search_results_for);
-            titleText.setText(Html.fromHtml(getString(R.string.search_results_for,
-                    "<b>" + mInitialFilter + "</b>")));
-        } else {
-            setContentView(R.layout.contacts_list_content);
-        }
+        setContentView(mConfig.createView());
 
-        mConfig.configureListView(getListView());
+        mListView = (ListView) findViewById(android.R.id.list);
 
         if (mSearchMode) {
             setupSearchView();
         }
 
-        View emptyView = mList.getEmptyView();
+        View emptyView = mListView.getEmptyView();
         if (emptyView instanceof ContactListEmptyView) {
             mEmptyView = (ContactListEmptyView)emptyView;
         }
@@ -593,12 +541,7 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
 
     // TODO move this to the configuration object(s)
     @Deprecated
-    public void setupListView(ListAdapter adapter) {
-        final ListView list = getListView();
-        final LayoutInflater inflater = getLayoutInflater();
-
-        mHighlightingAnimation =
-                new NameHighlightingAnimation(list, TEXT_HIGHLIGHTING_ANIMATION_DURATION);
+    public void setupListView(ListAdapter adapter, ListView list) {
 
         // Tell list view to not show dividers. We'll do it ourself so that we can *not* show
         // them when an A-Z headers is visible.
@@ -606,7 +549,6 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
         list.setOnCreateContextMenuListener(this);
 
         mAdapter = (ContactEntryListAdapter)adapter;
-        setListAdapter(mAdapter);
 
         list.setOnScrollListener(this);
         list.setOnKeyListener(this);
@@ -639,14 +581,6 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
     }
 
     public void onScrollStateChanged(AbsListView view, int scrollState) {
-        if (mHighlightWhenScrolling) {
-            if (scrollState != OnScrollListener.SCROLL_STATE_IDLE) {
-                mHighlightingAnimation.startHighlighting();
-            } else {
-                mHighlightingAnimation.stopHighlighting();
-            }
-        }
-
         if (scrollState == OnScrollListener.SCROLL_STATE_FLING) {
             mPhotoLoader.pause();
         } else if (mConfig.isPhotoLoaderEnabled()) {
@@ -879,8 +813,8 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
     protected void onSaveInstanceState(Bundle icicle) {
         super.onSaveInstanceState(icicle);
         // Save list state in the bundle so we can restore it after the QueryHandler has run
-        if (mList != null) {
-            icicle.putParcelable(LIST_STATE_KEY, mList.onSaveInstanceState());
+        if (mListView != null) {
+            icicle.putParcelable(LIST_STATE_KEY, mListView.onSaveInstanceState());
         }
     }
 
@@ -1262,7 +1196,7 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
             return;
         }
 
-        Cursor cursor = (Cursor) getListAdapter().getItem(info.position);
+        Cursor cursor = (Cursor) mAdapter.getItem(info.position);
         if (cursor == null) {
             // For some reason the requested item isn't available, do nothing
             return;
@@ -1312,7 +1246,7 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
             return false;
         }
 
-        Cursor cursor = (Cursor) getListAdapter().getItem(info.position);
+        Cursor cursor = (Cursor) mAdapter.getItem(info.position);
 
         switch (item.getItemId()) {
             case MENU_ITEM_TOGGLE_STAR: {
@@ -1412,7 +1346,7 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
             return false;
         }
 
-        final int position = getListView().getSelectedItemPosition();
+        final int position = mListView.getSelectedItemPosition();
         if (position != ListView.INVALID_POSITION) {
             Uri contactUri = getContactUri(position);
             if (contactUri != null) {
@@ -1470,7 +1404,7 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
      * Dismisses the soft keyboard when the list takes focus.
      */
     public void onFocusChange(View view, boolean hasFocus) {
-        if (view == getListView() && hasFocus) {
+        if (view == mListView && hasFocus) {
             hideSoftKeyboard();
         }
     }
@@ -1479,7 +1413,7 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
      * Dismisses the soft keyboard when the list takes focus.
      */
     public boolean onTouch(View view, MotionEvent event) {
-        if (view == getListView()) {
+        if (view == mListView) {
             hideSoftKeyboard();
         }
         return false;
@@ -1554,7 +1488,7 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
         // Hide soft keyboard, if visible
         InputMethodManager inputMethodManager = (InputMethodManager)
                 getSystemService(Context.INPUT_METHOD_SERVICE);
-        inputMethodManager.hideSoftInputFromWindow(mList.getWindowToken(), 0);
+        inputMethodManager.hideSoftInputFromWindow(mListView.getWindowToken(), 0);
     }
 
     /**
@@ -2072,15 +2006,23 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
         mSortOrder = mContactsPrefs.getSortOrder();
         mDisplayOrder = mContactsPrefs.getDisplayOrder();
 
-        // When sort order and display order contradict each other, we want to
-        // highlight the part of the name used for sorting.
-        mHighlightWhenScrolling = false;
-        if (mSortOrder == ContactsContract.Preferences.SORT_ORDER_PRIMARY &&
-                mDisplayOrder == ContactsContract.Preferences.DISPLAY_ORDER_ALTERNATIVE) {
-            mHighlightWhenScrolling = true;
-        } else if (mSortOrder == ContactsContract.Preferences.SORT_ORDER_ALTERNATIVE &&
-                mDisplayOrder == ContactsContract.Preferences.DISPLAY_ORDER_PRIMARY) {
-            mHighlightWhenScrolling = true;
+        if (mListView instanceof ContactEntryListView) {
+            ContactEntryListView listView = (ContactEntryListView)mListView;
+
+            // When sort order and display order contradict each other, we want to
+            // highlight the part of the name used for sorting.
+            if (mSortOrder == ContactsContract.Preferences.SORT_ORDER_PRIMARY &&
+                    mDisplayOrder == ContactsContract.Preferences.DISPLAY_ORDER_ALTERNATIVE) {
+                listView.setHighlightNamesWhenScrolling(true);
+                mAdapter.setNameHighlightingEnabled(true);
+            } else if (mSortOrder == ContactsContract.Preferences.SORT_ORDER_ALTERNATIVE &&
+                    mDisplayOrder == ContactsContract.Preferences.DISPLAY_ORDER_PRIMARY) {
+                listView.setHighlightNamesWhenScrolling(true);
+                mAdapter.setNameHighlightingEnabled(true);
+            } else {
+                listView.setHighlightNamesWhenScrolling(false);
+                mAdapter.setNameHighlightingEnabled(false);
+            }
         }
 
         String[] projection = getProjectionForQuery();
@@ -2250,7 +2192,7 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
      * @return true if the call was initiated, false otherwise
      */
     boolean callSelection() {
-        ListView list = getListView();
+        ListView list = mListView;
         if (list.hasFocus()) {
             Cursor cursor = (Cursor) list.getSelectedItem();
             return callContact(cursor);
@@ -2380,12 +2322,11 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
     }
 
     Cursor getItemForView(View view) {
-        ListView listView = getListView();
-        int index = listView.getPositionForView(view);
+        int index = mListView.getPositionForView(view);
         if (index < 0) {
             return null;
         }
-        return (Cursor) listView.getAdapter().getItem(index);
+        return (Cursor) mListView.getAdapter().getItem(index);
     }
 
     protected class QueryHandler extends AsyncQueryHandler {
@@ -2427,20 +2368,8 @@ public class ContactsListActivity extends ListActivity implements View.OnCreateC
 
         // Now that the cursor is populated again, it's possible to restore the list state
         if (mListState != null) {
-            mList.onRestoreInstanceState(mListState);
+            mListView.onRestoreInstanceState(mListState);
             mListState = null;
         }
     }
-
-    public final static class ContactListItemCache {
-        public CharArrayBuffer nameBuffer = new CharArrayBuffer(128);
-        public CharArrayBuffer dataBuffer = new CharArrayBuffer(128);
-        public CharArrayBuffer highlightedTextBuffer = new CharArrayBuffer(128);
-        public TextWithHighlighting textWithHighlighting;
-        public CharArrayBuffer phoneticNameBuffer = new CharArrayBuffer(128);
-        public long phoneId;
-        // phoneNumber only validates when phoneId = INVALID_PHONE_ID
-        public String phoneNumber;
-    }
-
 }
