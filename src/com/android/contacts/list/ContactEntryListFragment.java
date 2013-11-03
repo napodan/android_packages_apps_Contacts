@@ -16,28 +16,49 @@
 
 package com.android.contacts.list;
 
+import com.android.contacts.ContactPhotoLoader;
 import com.android.contacts.ContactsApplicationController;
 import com.android.contacts.ContactsListActivity;
 import com.android.contacts.R;
 import com.android.contacts.widget.ContextMenuAdapter;
 import com.android.contacts.widget.PinnedHeaderListView;
+import com.android.contacts.widget.SearchEditText;
+import com.android.contacts.widget.SearchEditText.OnCloseListener;
 
 import android.app.Fragment;
 import android.content.Context;
+import android.os.Bundle;
+import android.os.Parcelable;
+import android.text.Editable;
 import android.text.Html;
+import android.text.TextUtils;
+import android.text.TextWatcher;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.View.OnFocusChangeListener;
+import android.view.View.OnTouchListener;
+import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.AbsListView;
 import android.widget.AdapterView;
+import android.widget.Filter;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.TextView.OnEditorActionListener;
+import android.widget.AbsListView.OnScrollListener;
+import android.widget.AdapterView.OnItemClickListener;
 
 /**
  * Common base class for various contact-related list fragments.
  */
-public abstract class ContactEntryListFragment extends Fragment
-        implements AdapterView.OnItemClickListener {
+public abstract class ContactEntryListFragment extends Fragment implements OnItemClickListener,
+        OnScrollListener, TextWatcher, OnEditorActionListener, OnCloseListener,
+        OnFocusChangeListener, OnTouchListener {
+
+    private static final String LIST_STATE_KEY = "liststate";
 
     private boolean mSectionHeaderDisplayEnabled;
     private boolean mPhotoLoaderEnabled;
@@ -49,9 +70,16 @@ public abstract class ContactEntryListFragment extends Fragment
     private ContactEntryListAdapter mAdapter;
     private ListView mListView;
 
+    /**
+     * Used for keeping track of the scroll state of the list.
+     */
+    private Parcelable mListState;
+
     private boolean mLegacyCompatibility;
     private int mDisplayOrder;
     private ContextMenuAdapter mContextMenuAdapter;
+    private ContactPhotoLoader mPhotoLoader;
+    private SearchEditText mSearchEditText;
 
     protected abstract View inflateView(LayoutInflater inflater, ViewGroup container);
     protected abstract ContactEntryListAdapter createListAdapter();
@@ -59,6 +87,12 @@ public abstract class ContactEntryListFragment extends Fragment
 
     public ContactEntryListAdapter getAdapter() {
         return mAdapter;
+    }
+
+    /**
+     * Override to provide logic that dismisses this fragment.
+     */
+    protected void finish() {
     }
 
     public void setSectionHeaderDisplayEnabled(boolean flag) {
@@ -116,7 +150,6 @@ public abstract class ContactEntryListFragment extends Fragment
         }
     }
 
-
     @Deprecated
     public void setContactsApplicationController(ContactsApplicationController controller) {
         mAppController = controller;
@@ -161,9 +194,15 @@ public abstract class ContactEntryListFragment extends Fragment
 
         mListView.setAdapter(mAdapter);
         mListView.setOnItemClickListener(this);
+        mListView.setOnFocusChangeListener(this);
+        mListView.setOnTouchListener(this);
+
         // Tell list view to not show dividers. We'll do it ourself so that we can *not* show
         // them when an A-Z headers is visible.
         mListView.setDividerHeight(0);
+
+        // We manually save/restore the listview state
+        mListView.setSaveEnabled(false);
 
         if (mContextMenuAdapter != null) {
             mListView.setOnCreateContextMenuListener(mContextMenuAdapter);
@@ -171,9 +210,23 @@ public abstract class ContactEntryListFragment extends Fragment
 
         mAdapter.setContactNameDisplayOrder(mDisplayOrder);
 
-        ((ContactsListActivity)getActivity()).setupListView(mAdapter, mListView);
-
         configurePinnedHeader();
+
+        if (isPhotoLoaderEnabled()) {
+            mPhotoLoader =
+                new ContactPhotoLoader(getActivity(), R.drawable.ic_contact_list_picture);
+            mAdapter.setPhotoLoader(mPhotoLoader);
+            mListView.setOnScrollListener(this);
+        }
+
+        if (isSearchMode()) {
+            mSearchEditText = (SearchEditText)view.findViewById(R.id.search_src_text);
+            mSearchEditText.setText(getQueryString());
+            mSearchEditText.addTextChangedListener(this);
+            mSearchEditText.setOnEditorActionListener(this);
+            mSearchEditText.setOnCloseListener(this);
+            mAdapter.setQueryString(getQueryString());
+        }
 
         if (isSearchResultsMode()) {
             TextView titleText = (TextView)view.findViewById(R.id.search_results_for);
@@ -182,6 +235,37 @@ public abstract class ContactEntryListFragment extends Fragment
                         "<b>" + getQueryString() + "</b>")));
             }
         }
+
+        ((ContactsListActivity)getActivity()).setupListView(mAdapter, mListView);
+    }
+
+    public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount,
+            int totalItemCount) {
+    }
+
+    public void onScrollStateChanged(AbsListView view, int scrollState) {
+        if (scrollState == OnScrollListener.SCROLL_STATE_FLING) {
+            mPhotoLoader.pause();
+        } else if (isPhotoLoaderEnabled()) {
+            mPhotoLoader.resume();
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (isPhotoLoaderEnabled()) {
+            mPhotoLoader.resume();
+        }
+        if (isSearchMode()) {
+            mSearchEditText.requestFocus();
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        mPhotoLoader.stop();
+        super.onDestroy();
     }
 
     private void configurePinnedHeader() {
@@ -202,11 +286,94 @@ public abstract class ContactEntryListFragment extends Fragment
         onItemClick(position, id);
     }
 
-
     private void hideSoftKeyboard() {
         // Hide soft keyboard, if visible
         InputMethodManager inputMethodManager = (InputMethodManager)
                 getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
         inputMethodManager.hideSoftInputFromWindow(mListView.getWindowToken(), 0);
+    }
+
+    /**
+     * Event handler for search UI.
+     */
+    public void afterTextChanged(Editable s) {
+        String query = s.toString().trim();
+        setQueryString(query);
+        mAdapter.setQueryString(query);
+        Filter filter = mAdapter.getFilter();
+        filter.filter(query);
+    }
+
+    public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+    }
+
+    public void onTextChanged(CharSequence s, int start, int before, int count) {
+    }
+
+    /**
+     * Event handler for search UI.
+     */
+    public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+        if (actionId == EditorInfo.IME_ACTION_DONE) {
+            hideSoftKeyboard();
+            if (TextUtils.isEmpty(getQueryString())) {
+                finish();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Dismisses the soft keyboard when the list takes focus.
+     */
+    public void onFocusChange(View view, boolean hasFocus) {
+        if (view == mListView && hasFocus) {
+            hideSoftKeyboard();
+        }
+    }
+
+    /**
+     * Dismisses the soft keyboard when the list is touched.
+     */
+    public boolean onTouch(View view, MotionEvent event) {
+        if (view == mListView) {
+            hideSoftKeyboard();
+        }
+        return false;
+    }
+
+    /**
+     * Dismisses the search UI along with the keyboard if the filter text is empty.
+     */
+    public void onClose() {
+        hideSoftKeyboard();
+        finish();
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle icicle) {
+        super.onSaveInstanceState(icicle);
+        // Save list state in the bundle so we can restore it after the QueryHandler has run
+        if (mListView != null) {
+            icicle.putParcelable(LIST_STATE_KEY, mListView.onSaveInstanceState());
+        }
+    }
+
+    @Override
+    public void onRestoreInstanceState(Bundle icicle) {
+        super.onRestoreInstanceState(icicle);
+        // Retrieve list state. This will be applied after the QueryHandler has run
+        mListState = icicle.getParcelable(LIST_STATE_KEY);
+    }
+
+    /**
+     * Restore the list state after the adapter is populated.
+     */
+    public void completeRestoreInstanceState() {
+        if (mListState != null) {
+            mListView.onRestoreInstanceState(mListState);
+            mListState = null;
+        }
     }
 }
