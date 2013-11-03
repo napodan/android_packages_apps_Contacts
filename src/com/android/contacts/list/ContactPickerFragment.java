@@ -19,29 +19,21 @@ import com.android.contacts.ContactsListActivity;
 import com.android.contacts.R;
 
 import android.content.Intent;
-import android.database.Cursor;
 import android.net.Uri;
-import android.provider.ContactsContract.Contacts;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ListAdapter;
-import android.widget.ListView;
 
 /**
- * Fragment for the light-weight contact list.
+ * Fragment for the contact list used for browsing contacts (as compared to
+ * picking a contact with one of the PICK or SHORTCUT intents).
  */
-public class LightContactBrowser extends ContactEntryListFragment {
+public class ContactPickerFragment extends ContactEntryListFragment {
 
-    // TODO move these constants to the "loader"
-    public static final int SUMMARY_ID_COLUMN_INDEX = 0;
-    public static final int SUMMARY_LOOKUP_KEY_COLUMN_INDEX = 8;
-
-    private OnContactBrowserActionListener mListener;
-    private boolean mEditMode;
+    private OnContactPickerActionListener mListener;
     private boolean mCreateContactEnabled;
 
-    public void setOnContactBrowserActionListener(OnContactBrowserActionListener listener) {
+    public void setOnContactPickerActionListener(OnContactPickerActionListener listener) {
         mListener = listener;
     }
 
@@ -53,20 +45,20 @@ public class LightContactBrowser extends ContactEntryListFragment {
     protected void onItemClick(int position, long id) {
         if (isSearchAllContactsItemPosition(position)) {
             mListener.onSearchAllContactsAction((String)null);
-        } else if (isEditMode()) {
+        } else {
             Intent intent;
             if (position == 0 && !isSearchMode() && isCreateContactEnabled()) {
                 mListener.onCreateNewContactAction();
             } else {
-                mListener.onEditContactAction(getContactUri(position));
+                ContactEntryListAdapter adapter = getAdapter();
+                adapter.moveToPosition(position);
+                mListener.onPickContactAction(adapter.getContactUri());
             }
-        } else {
-            mListener.onViewContactAction(getContactUri(position));
         }
     }
 
     @Override
-    protected ListAdapter createListAdapter() {
+    protected ContactEntryListAdapter createListAdapter() {
         ContactItemListAdapter adapter =
                 new ContactItemListAdapter((ContactsListActivity)getActivity());
         adapter.setSectionHeaderDisplayEnabled(isSectionHeaderDisplayEnabled());
@@ -85,35 +77,11 @@ public class LightContactBrowser extends ContactEntryListFragment {
         }
     }
 
-    public void setEditMode(boolean flag) {
-        mEditMode = flag;
-    }
-
-    public boolean isEditMode() {
-        return mEditMode;
-    }
-
     public void setCreateContactEnabled(boolean flag) {
         this.mCreateContactEnabled = flag;
     }
 
     public boolean isCreateContactEnabled() {
         return mCreateContactEnabled;
-    }
-
-    /**
-     * Build the {@link Contacts#CONTENT_LOOKUP_URI} for the given
-     * {@link ListView} position.
-     */
-    private Uri getContactUri(int position) {
-        final Cursor cursor = (Cursor)getAdapter().getItem(position);
-        if (cursor == null) {
-            return null;
-        }
-
-        // Build and return soft, lookup reference
-        long contactId = cursor.getLong(SUMMARY_ID_COLUMN_INDEX);
-        String lookupKey = cursor.getString(SUMMARY_LOOKUP_KEY_COLUMN_INDEX);
-        return Contacts.getLookupUri(contactId, lookupKey);
     }
 }

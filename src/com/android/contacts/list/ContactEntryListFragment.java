@@ -19,6 +19,7 @@ package com.android.contacts.list;
 import com.android.contacts.ContactsApplicationController;
 import com.android.contacts.ContactsListActivity;
 import com.android.contacts.R;
+import com.android.contacts.widget.ContextMenuAdapter;
 import com.android.contacts.widget.PinnedHeaderListView;
 
 import android.app.Fragment;
@@ -29,7 +30,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
-import android.widget.ListAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
 
@@ -46,16 +46,18 @@ public abstract class ContactEntryListFragment extends Fragment
     private String mQueryString;
 
     private ContactsApplicationController mAppController;
-    private ListAdapter mAdapter;
+    private ContactEntryListAdapter mAdapter;
     private ListView mListView;
 
     private boolean mLegacyCompatibility;
+    private int mDisplayOrder;
+    private ContextMenuAdapter mContextMenuAdapter;
 
     protected abstract View inflateView(LayoutInflater inflater, ViewGroup container);
-    protected abstract ListAdapter createListAdapter();
+    protected abstract ContactEntryListAdapter createListAdapter();
     protected abstract void onItemClick(int position, long id);
 
-    public ListAdapter getAdapter() {
+    public ContactEntryListAdapter getAdapter() {
         return mAdapter;
     }
 
@@ -107,6 +109,14 @@ public abstract class ContactEntryListFragment extends Fragment
         mLegacyCompatibility = flag;
     }
 
+    public void setContactNameDisplayOrder(int displayOrder) {
+        mDisplayOrder = displayOrder;
+        if (mAdapter != null) {
+            mAdapter.setContactNameDisplayOrder(displayOrder);
+        }
+    }
+
+
     @Deprecated
     public void setContactsApplicationController(ContactsApplicationController controller) {
         mAppController = controller;
@@ -117,15 +127,26 @@ public abstract class ContactEntryListFragment extends Fragment
         return mAppController;
     }
 
+    public void setContextMenuAdapter(ContextMenuAdapter adapter) {
+        mContextMenuAdapter = adapter;
+        if (mListView != null) {
+            mListView.setOnCreateContextMenuListener(adapter);
+        }
+    }
+
+    public ContextMenuAdapter getContextMenuAdapter() {
+        return mContextMenuAdapter;
+    }
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container) {
         View view = inflateView(inflater, container);
         mAdapter = createListAdapter();
-        configureView(view, mAdapter);
+        configureView(view);
         return view;
     }
 
-    protected void configureView(View view, ListAdapter adapter) {
+    protected void configureView(View view) {
         mListView = (ListView)view.findViewById(android.R.id.list);
         if (mListView == null) {
             throw new RuntimeException(
@@ -138,12 +159,21 @@ public abstract class ContactEntryListFragment extends Fragment
             mListView.setEmptyView(emptyView);
         }
 
-        mListView.setAdapter(adapter);
+        mListView.setAdapter(mAdapter);
         mListView.setOnItemClickListener(this);
+        // Tell list view to not show dividers. We'll do it ourself so that we can *not* show
+        // them when an A-Z headers is visible.
+        mListView.setDividerHeight(0);
 
-        ((ContactsListActivity)getActivity()).setupListView(adapter, mListView);
+        if (mContextMenuAdapter != null) {
+            mListView.setOnCreateContextMenuListener(mContextMenuAdapter);
+        }
 
-        configurePinnedHeader(mListView, adapter);
+        mAdapter.setContactNameDisplayOrder(mDisplayOrder);
+
+        ((ContactsListActivity)getActivity()).setupListView(mAdapter, mListView);
+
+        configurePinnedHeader();
 
         if (isSearchResultsMode()) {
             TextView titleText = (TextView)view.findViewById(R.id.search_results_for);
@@ -154,16 +184,14 @@ public abstract class ContactEntryListFragment extends Fragment
         }
     }
 
-    private void configurePinnedHeader(ListView listView, ListAdapter adapter) {
+    private void configurePinnedHeader() {
         if (!mSectionHeaderDisplayEnabled) {
             return;
         }
 
-        if (listView instanceof PinnedHeaderListView
-                && adapter instanceof PinnedHeaderListAdapter) {
-            PinnedHeaderListView pinnedHeaderList = (PinnedHeaderListView)listView;
-            PinnedHeaderListAdapter pinnedHeaderListAdapter = (PinnedHeaderListAdapter)adapter;
-            View headerView = pinnedHeaderListAdapter.createPinnedHeaderView(pinnedHeaderList);
+        if (mListView instanceof PinnedHeaderListView) {
+            PinnedHeaderListView pinnedHeaderList = (PinnedHeaderListView)mListView;
+            View headerView = mAdapter.createPinnedHeaderView(pinnedHeaderList);
             pinnedHeaderList.setPinnedHeaderView(headerView);
         }
     }
