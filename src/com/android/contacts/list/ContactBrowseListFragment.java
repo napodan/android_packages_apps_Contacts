@@ -15,35 +15,30 @@
  */
 package com.android.contacts.list;
 
-import com.android.contacts.R;
-
 import android.app.patterns.CursorLoader;
 import android.app.patterns.Loader;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
-import android.text.TextUtils;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ListView;
-import android.widget.TextView;
 
 /**
  * Fragment containing a contact list used for browsing (as compared to
  * picking a contact with one of the PICK intents).
  */
-public class ContactBrowseListFragment extends ContactEntryListFragment<ContactListAdapter> {
+public abstract class ContactBrowseListFragment extends
+        ContactEntryListFragment<ContactListAdapter> {
 
     private OnContactBrowserActionListener mListener;
-    private boolean mEditMode;
-    private boolean mCreateContactEnabled;
 
     private CursorLoader mLoader;
 
     @Override
     protected CursorLoader onCreateLoader(int id, Bundle args) {
         mLoader = new CursorLoader(getActivity(), null, null, null, null, null);
+        return mLoader;
+    }
+
+    public CursorLoader getLoader() {
         return mLoader;
     }
 
@@ -68,75 +63,12 @@ public class ContactBrowseListFragment extends ContactEntryListFragment<ContactL
         getAdapter().changeCursor(data);
     }
 
-    @Override
-    protected void onItemClick(int position, long id) {
-        ContactListAdapter adapter = getAdapter();
-        if (adapter.isSearchAllContactsItemPosition(position)) {
-            mListener.onSearchAllContactsAction((String)null);
-        } else if (isEditMode()) {
-            if (position == 0 && !isSearchMode() && isCreateContactEnabled()) {
-                mListener.onCreateNewContactAction();
-            } else {
-                adapter.moveToPosition(position);
-                mListener.onEditContactAction(adapter.getContactUri());
-            }
-        } else {
-            adapter.moveToPosition(position);
-            mListener.onViewContactAction(adapter.getContactUri());
-        }
+    public void createNewContact() {
+        mListener.onCreateNewContactAction();
     }
 
-    @Override
-    protected ContactListAdapter createListAdapter() {
-        ContactListAdapter adapter = new ContactListAdapter(getActivity());
-        adapter.setSectionHeaderDisplayEnabled(isSectionHeaderDisplayEnabled());
-
-        adapter.setSearchMode(isSearchMode());
-        adapter.setSearchResultsMode(isSearchResultsMode());
-        adapter.setQueryString(getQueryString());
-
-        adapter.setContactNameDisplayOrder(getContactNameDisplayOrder());
-        adapter.setSortOrder(getSortOrder());
-
-        adapter.setDisplayPhotos(true);
-        adapter.setQuickContactEnabled(true);
-
-        adapter.configureLoader(mLoader);
-        return adapter;
-    }
-
-    @Override
-    protected View inflateView(LayoutInflater inflater, ViewGroup container) {
-        if (isSearchMode()) {
-            return inflater.inflate(R.layout.contacts_search_content, null);
-        } else if (isSearchResultsMode()) {
-            return inflater.inflate(R.layout.contacts_list_search_results, null);
-        } else {
-            return inflater.inflate(R.layout.contacts_list_content, null);
-        }
-    }
-
-    @Override
-    protected View createView(LayoutInflater inflater, ViewGroup container) {
-        View view = super.createView(inflater, container);
-        getListView().addHeaderView(inflater.inflate(R.layout.total_contacts, null, false));
-        return view;
-    }
-
-    public void setEditMode(boolean flag) {
-        mEditMode = flag;
-    }
-
-    public boolean isEditMode() {
-        return mEditMode;
-    }
-
-    public void setCreateContactEnabled(boolean flag) {
-        this.mCreateContactEnabled = flag;
-    }
-
-    public boolean isCreateContactEnabled() {
-        return mCreateContactEnabled;
+    public void searchAllContacts() {
+        mListener.onSearchAllContactsAction((String)null);
     }
 
     public void viewContact(Uri contactUri) {
