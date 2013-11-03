@@ -66,12 +66,21 @@ public class GoogleSource extends FallbackSource {
         inflateNote(context, inflateLevel);
         inflateWebsite(context, inflateLevel);
         inflateEvent(context, inflateLevel);
-        inflateSipAddress(context, inflateLevel);
 
         // TODO: GOOGLE: GROUPMEMBERSHIP
 
         setInflatedLevel(inflateLevel);
 
+    }
+
+    @Override
+    protected DataKind inflateStructuredName(Context context, int inflateLevel) {
+        return super.inflateStructuredName(context, inflateLevel);
+    }
+
+    @Override
+    protected DataKind inflateNickname(Context context, int inflateLevel) {
+        return super.inflateNickname(context, inflateLevel);
     }
 
     @Override
@@ -118,111 +127,34 @@ public class GoogleSource extends FallbackSource {
         return kind;
     }
 
-    // TODO: this should come from resource in the future
-    // Note that frameworks/base/core/java/android/pim/vcard/VCardEntry.java also wants
-    // this String.
-    private static final String GOOGLE_MY_CONTACTS_GROUP = "System Group: My Contacts";
-
-    public static final void attemptMyContactsMembership(EntityDelta state, Context context) {
-        final ValuesDelta stateValues = state.getValues();
-	stateValues.setFromTemplate(true);
-        final String accountName = stateValues.getAsString(RawContacts.ACCOUNT_NAME);
-        final String accountType = stateValues.getAsString(RawContacts.ACCOUNT_TYPE);
-        attemptMyContactsMembership(state, accountName, accountType, context, true);
+    @Override
+    protected DataKind inflateStructuredPostal(Context context, int inflateLevel) {
+        return super.inflateStructuredPostal(context, inflateLevel);
     }
 
-    public static final void createMyContactsIfNotExist(Account account, Context context) {
-        attemptMyContactsMembership(null, account.name, account.type, context, true);
+    @Override
+    protected DataKind inflateIm(Context context, int inflateLevel) {
+        return super.inflateIm(context, inflateLevel);
     }
 
-    /**
-     *
-     * @param allowRecur If the group is created between querying/about to create, we recur.  But
-     *     to prevent excess recursion, we provide a flag to make sure we only do the recursion loop
-     *     once
-     */
-    private static final void attemptMyContactsMembership(EntityDelta state,
-                final String accountName, final String accountType, Context context,
-                boolean allowRecur) {
-        final ContentResolver resolver = context.getContentResolver();
+    @Override
+    protected DataKind inflateOrganization(Context context, int inflateLevel) {
+        return super.inflateOrganization(context, inflateLevel);
+    }
 
-        Cursor cursor = resolver.query(Groups.CONTENT_URI,
-                new String[] {Groups.TITLE, Groups.SOURCE_ID, Groups.SHOULD_SYNC},
-                Groups.ACCOUNT_NAME + " =? AND " + Groups.ACCOUNT_TYPE + " =?",
-                new String[] {accountName, accountType}, null);
+    @Override
+    protected DataKind inflatePhoto(Context context, int inflateLevel) {
+        return super.inflatePhoto(context, inflateLevel);
+    }
 
-        boolean myContactsExists = false;
-        long assignToGroupSourceId = -1;
-        while (cursor.moveToNext()) {
-            if (GOOGLE_MY_CONTACTS_GROUP.equals(cursor.getString(0))) {
-                myContactsExists = true;
-            }
-            if (assignToGroupSourceId == -1 && cursor.getInt(2) != 0) {
-                assignToGroupSourceId = cursor.getInt(1);
-            }
+    @Override
+    protected DataKind inflateNote(Context context, int inflateLevel) {
+        return super.inflateNote(context, inflateLevel);
+    }
 
-            if (myContactsExists && assignToGroupSourceId != -1) {
-                break;
-            }
-        }
-
-        if (myContactsExists && state == null) {
-            return;
-        }
-
-        try {
-            final ContentValues values = new ContentValues();
-            values.put(Data.MIMETYPE, GroupMembership.CONTENT_ITEM_TYPE);
-
-            if (!myContactsExists) {
-                // create the group if it doesn't exist
-                final ContentValues newGroup = new ContentValues();
-                newGroup.put(Groups.TITLE, GOOGLE_MY_CONTACTS_GROUP);
-
-                newGroup.put(Groups.ACCOUNT_NAME, accountName);
-                newGroup.put(Groups.ACCOUNT_TYPE, accountType);
-                newGroup.put(Groups.GROUP_VISIBLE, "1");
-
-                ArrayList<ContentProviderOperation> operations =
-                    new ArrayList<ContentProviderOperation>();
-
-                operations.add(ContentProviderOperation
-                        .newAssertQuery(Groups.CONTENT_URI)
-                        .withSelection(SELECTION_GROUPS_BY_TITLE_AND_ACCOUNT,
-                                new String[] {GOOGLE_MY_CONTACTS_GROUP, accountName, accountType})
-                        .withExpectedCount(0).build());
-                operations.add(ContentProviderOperation
-                        .newInsert(Groups.CONTENT_URI)
-                        .withValues(newGroup)
-                        .build());
-                try {
-                    ContentProviderResult[] results = resolver.applyBatch(
-                            ContactsContract.AUTHORITY, operations);
-                    values.put(GroupMembership.GROUP_ROW_ID, ContentUris.parseId(results[1].uri));
-                } catch (RemoteException e) {
-                    throw new IllegalStateException("Problem querying for groups", e);
-                } catch (OperationApplicationException e) {
-                    // the group was created after the query but before we tried to create it
-                    if (allowRecur) {
-                        attemptMyContactsMembership(
-                                state, accountName, accountType, context, false);
-                    }
-                    return;
-                }
-            } else {
-                if (assignToGroupSourceId != -1) {
-                    values.put(GroupMembership.GROUP_SOURCE_ID, assignToGroupSourceId);
-                } else {
-                    // there are no Groups to add this contact to, so don't apply any membership
-                    // TODO: alert user that their contact will be dropped?
-                }
-            }
-            if (state != null) {
-                state.addEntry(ValuesDelta.fromAfter(values));
-            }
-        } finally {
-            cursor.close();
-        }
+    @Override
+    protected DataKind inflateWebsite(Context context, int inflateLevel) {
+        return super.inflateWebsite(context, inflateLevel);
     }
 
     @Override
