@@ -112,9 +112,9 @@ public class ContactItemListAdapter extends ContactEntryListAdapter {
 
     @Override
     public boolean isEmpty() {
-        if (contactsListActivity.mProviderStatus != ProviderStatus.STATUS_NORMAL) {
-            return true;
-        }
+//        if (contactsListActivity.mProviderStatus != ProviderStatus.STATUS_NORMAL) {
+//            return true;
+//        }
 
         if (contactsListActivity.mSearchMode) {
             return TextUtils.isEmpty(getQueryString());
@@ -245,7 +245,7 @@ public class ContactItemListAdapter extends ContactEntryListAdapter {
     @Override
     public View newView(Context context, Cursor cursor, ViewGroup parent) {
         final ContactListItemView view = new ContactListItemView(context, null);
-        view.setOnCallButtonClickListener(contactsListActivity);
+//        view.setOnCallButtonClickListener(contactsListActivity);
         return view;
     }
 

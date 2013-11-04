@@ -17,37 +17,54 @@
 package com.android.contacts.list;
 
 import com.android.contacts.ContactEntryListView;
+import com.android.contacts.ContactListEmptyView;
 import com.android.contacts.ContactPhotoLoader;
-import com.android.contacts.ContactsApplicationController;
-import com.android.contacts.ContactsListActivity;
 import com.android.contacts.R;
+import com.android.contacts.ui.ContactsPreferences;
 import com.android.contacts.widget.ContextMenuAdapter;
 import com.android.contacts.widget.SearchEditText;
 import com.android.contacts.widget.SearchEditText.OnCloseListener;
 
+import android.accounts.Account;
+import android.accounts.AccountManager;
 import android.app.patterns.CursorLoader;
 import android.app.patterns.Loader;
 import android.app.patterns.LoaderManagingFragment;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
+import android.content.IContentService;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.database.ContentObserver;
 import android.database.Cursor;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.Parcelable;
+import android.os.RemoteException;
+import android.preference.PreferenceManager;
 import android.provider.ContactsContract;
+import android.provider.Settings;
+import android.provider.ContactsContract.ProviderStatus;
+import android.telephony.TelephonyManager;
 import android.text.Editable;
 import android.text.Html;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.View.OnClickListener;
 import android.view.View.OnFocusChangeListener;
 import android.view.View.OnTouchListener;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.AbsListView;
 import android.widget.AdapterView;
+import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.AbsListView.OnScrollListener;
@@ -63,6 +80,8 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
         OnScrollListener, TextWatcher, OnEditorActionListener, OnCloseListener,
         OnFocusChangeListener, OnTouchListener {
 
+    private static final String TAG = "ContactEntryListFragment";
+
     private static final String LIST_STATE_KEY = "liststate";
 
     private boolean mSectionHeaderDisplayEnabled;
@@ -71,7 +90,6 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
     private boolean mSearchResultsMode;
     private String mQueryString;
 
-    private ContactsApplicationController mAppController;
     private CursorLoader mLoader;
     private T mAdapter;
     private View mView;
@@ -89,6 +107,12 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
     private ContextMenuAdapter mContextMenuAdapter;
     private ContactPhotoLoader mPhotoLoader;
     private SearchEditText mSearchEditText;
+    private ContactListEmptyView mEmptyView;
+    private ProviderStatusLoader mProviderStatusLoader;
+    private SharedPreferences mSharedPrefs;
+    private ContactsPreferences mContactsPrefs;
+
+    private int mProviderStatus = ProviderStatus.STATUS_NORMAL;
 
     protected abstract View inflateView(LayoutInflater inflater, ViewGroup container);
     protected abstract T createListAdapter();
@@ -108,25 +132,16 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
         return mAdapter;
     }
 
-    public void setListAdapter(T adapter) {
-        mAdapter = adapter;
-        mListView.setAdapter(mAdapter);
-        if (isPhotoLoaderEnabled()) {
-            mAdapter.setPhotoLoader(mPhotoLoader);
-        }
-        if (isNameHighlighingEnabled()) {
-            mAdapter.setNameHighlightingEnabled(true);
-        }
-
-        ((ContactsListActivity)getActivity()).setupListView(mAdapter, mListView);
-    }
-
     public View getView() {
         return mView;
     }
 
     public ListView getListView() {
         return mListView;
+    }
+
+    public ContactListEmptyView getEmptyView() {
+        return mEmptyView;
     }
 
     @Override
@@ -137,21 +152,42 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
     @Override
     protected void onInitializeLoaders() {
         mLoader = (CursorLoader)startLoading(0, null);
+        if (mProviderStatusLoader == null) {
+            mProviderStatusLoader = new ProviderStatusLoader(mLoader);
+        }
     }
 
     @Override
     protected void onLoadFinished(Loader<Cursor> loader, Cursor data) {
+        if (!checkProviderStatus(false)) {
+            return;
+        }
+
         if (data == null) {
             return;
         }
 
+        if (mEmptyView != null && (data == null || data.getCount() == 0)) {
+            prepareEmptyView();
+        }
+
         mAdapter.changeCursor(data);
         showCount(data);
+
+        completeRestoreInstanceState();
     }
 
     protected void reloadData() {
+        configureAdapter();
         mAdapter.configureLoader(mLoader);
         mLoader.forceLoad();
+    }
+
+    /**
+     * Configures the empty view. It is called when we are about to populate
+     * the list with an empty cursor.
+     */
+    protected void prepareEmptyView() {
     }
 
     /**
@@ -241,16 +277,6 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
         }
     }
 
-    @Deprecated
-    public void setContactsApplicationController(ContactsApplicationController controller) {
-        mAppController = controller;
-    }
-
-    @Deprecated
-    public ContactsApplicationController getContactsApplicationController() {
-        return mAppController;
-    }
-
     public void setContextMenuAdapter(ContextMenuAdapter adapter) {
         mContextMenuAdapter = adapter;
         if (mListView != null) {
@@ -263,11 +289,40 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
     }
 
     @Override
+    public void onStart() {
+        if (mSharedPrefs == null) {
+            Context activity = getActivity();
+            mSharedPrefs = PreferenceManager.getDefaultSharedPreferences(activity);
+            mContactsPrefs = new ContactsPreferences(activity);
+        }
+
+        loadPreferences(mSharedPrefs, mContactsPrefs);
+        configureAdapter();
+        mAdapter.configureLoader(mLoader);
+
+        ContactEntryListView listView = (ContactEntryListView)mListView;
+        listView.setHighlightNamesWhenScrolling(isNameHighlighingEnabled());
+
+        super.onStart();
+    }
+
+    protected void loadPreferences(SharedPreferences prefs, ContactsPreferences contactsPrefs) {
+        setContactNameDisplayOrder(contactsPrefs.getDisplayOrder());
+        setSortOrder(contactsPrefs.getSortOrder());
+    }
+
+    @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container) {
         mView = createView(inflater, container);
         mAdapter = createListAdapter();
-        mAdapter.configureLoader(mLoader);
-        setListAdapter(mAdapter);
+        mAdapter.setSearchMode(isSearchMode());
+        mAdapter.setSearchResultsMode(isSearchResultsMode());
+
+        mListView.setAdapter(mAdapter);
+        if (isPhotoLoaderEnabled()) {
+            mAdapter.setPhotoLoader(mPhotoLoader);
+        }
+
         return mView;
     }
 
@@ -284,6 +339,9 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
         View emptyView = mView.findViewById(com.android.internal.R.id.empty);
         if (emptyView != null) {
             mListView.setEmptyView(emptyView);
+            if (emptyView instanceof ContactListEmptyView) {
+                mEmptyView = (ContactListEmptyView)emptyView;
+            }
         }
 
         mListView.setOnItemClickListener(this);
@@ -300,9 +358,6 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
         if (mContextMenuAdapter != null) {
             mListView.setOnCreateContextMenuListener(mContextMenuAdapter);
         }
-
-        ContactEntryListView listView = (ContactEntryListView)mListView;
-        listView.setHighlightNamesWhenScrolling(isNameHighlighingEnabled());
 
         if (isPhotoLoaderEnabled()) {
             mPhotoLoader =
@@ -326,6 +381,19 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
             }
         }
         return mView;
+    }
+
+    protected void configureAdapter() {
+        mAdapter.setQueryString(mQueryString);
+        mAdapter.setContactNameDisplayOrder(mDisplayOrder);
+        mAdapter.setSortOrder(mSortOrder);
+        mAdapter.setNameHighlightingEnabled(isNameHighlighingEnabled());
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        mAdapter.changeCursor(null);
     }
 
     private boolean isNameHighlighingEnabled() {
@@ -357,6 +425,9 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
     @Override
     public void onResume() {
         super.onResume();
+
+        registerProviderStatusObserver();
+
         if (isPhotoLoaderEnabled()) {
             mPhotoLoader.resume();
         }
@@ -370,7 +441,6 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
         mPhotoLoader.stop();
         super.onDestroy();
     }
-
 
     public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
         hideSoftKeyboard();
@@ -436,6 +506,12 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
         return false;
     }
 
+    @Override
+    public void onPause() {
+        super.onPause();
+        unregisterProviderStatusObserver();
+    }
+
     /**
      * Dismisses the search UI along with the keyboard if the filter text is empty.
      */
@@ -447,27 +523,154 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
     @Override
     public void onSaveInstanceState(Bundle icicle) {
         super.onSaveInstanceState(icicle);
-        // Save list state in the bundle so we can restore it after the QueryHandler has run
         if (mListView != null) {
-            icicle.putParcelable(LIST_STATE_KEY, mListView.onSaveInstanceState());
+            mListState = mListView.onSaveInstanceState();
+            icicle.putParcelable(LIST_STATE_KEY, mListState);
         }
     }
 
     @Override
     public void onRestoreInstanceState(Bundle icicle) {
         super.onRestoreInstanceState(icicle);
-        // Retrieve list state. This will be applied after the QueryHandler has run
+        // Retrieve list state. This will be applied in onLoadFinished
         mListState = icicle.getParcelable(LIST_STATE_KEY);
     }
 
     /**
      * Restore the list state after the adapter is populated.
      */
-    public void completeRestoreInstanceState() {
+    private void completeRestoreInstanceState() {
         if (mListState != null) {
             mListView.onRestoreInstanceState(mListState);
             mListState = null;
         }
+    }
+
+    private ContentObserver mProviderStatusObserver = new ContentObserver(new Handler()) {
+        @Override
+        public void onChange(boolean selfChange) {
+            checkProviderStatus(true);
+        }
+    };
+
+    /**
+     * Register an observer for provider status changes - we will need to
+     * reflect them in the UI.
+     */
+    private void registerProviderStatusObserver() {
+        getActivity().getContentResolver().registerContentObserver(ProviderStatus.CONTENT_URI,
+                false, mProviderStatusObserver);
+    }
+
+    /**
+     * Register an observer for provider status changes - we will need to
+     * reflect them in the UI.
+     */
+    private void unregisterProviderStatusObserver() {
+        getActivity().getContentResolver().unregisterContentObserver(mProviderStatusObserver);
+    }
+
+    /**
+     * Obtains the contacts provider status and configures the UI accordingly.
+     *
+     * @param loadData true if the method needs to start a query when the
+     *            provider is in the normal state
+     * @return true if the provider status is normal
+     */
+    private boolean checkProviderStatus(boolean loadData) {
+        View importFailureView = findViewById(R.id.import_failure);
+        if (importFailureView == null) {
+            return true;
+        }
+
+        // This query can be performed on the UI thread because
+        // the API explicitly allows such use.
+        Cursor cursor = getActivity().getContentResolver().query(ProviderStatus.CONTENT_URI,
+                new String[] { ProviderStatus.STATUS, ProviderStatus.DATA1 }, null, null, null);
+        if (cursor != null) {
+            try {
+                if (cursor.moveToFirst()) {
+                    int status = cursor.getInt(0);
+                    if (status != mProviderStatus) {
+                        mProviderStatus = status;
+                        switch (status) {
+                            case ProviderStatus.STATUS_NORMAL:
+                                mAdapter.notifyDataSetInvalidated();
+                                if (loadData) {
+                                    mLoader.forceLoad();
+                                }
+                                break;
+
+                            case ProviderStatus.STATUS_CHANGING_LOCALE:
+                                setEmptyText(R.string.locale_change_in_progress);
+                                mAdapter.changeCursor(null);
+                                mAdapter.notifyDataSetInvalidated();
+                                break;
+
+                            case ProviderStatus.STATUS_UPGRADING:
+                                setEmptyText(R.string.upgrade_in_progress);
+                                mAdapter.changeCursor(null);
+                                mAdapter.notifyDataSetInvalidated();
+                                break;
+
+                            case ProviderStatus.STATUS_UPGRADE_OUT_OF_MEMORY:
+                                long size = cursor.getLong(1);
+                                String message = getActivity().getResources().getString(
+                                        R.string.upgrade_out_of_memory, new Object[] {size});
+                                TextView messageView = (TextView) findViewById(R.id.emptyText);
+                                messageView.setText(message);
+                                messageView.setVisibility(View.VISIBLE);
+                                configureImportFailureView(importFailureView);
+                                mAdapter.changeCursor(null);
+                                mAdapter.notifyDataSetInvalidated();
+                                break;
+                        }
+                    }
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+
+        importFailureView.setVisibility(
+                mProviderStatus == ProviderStatus.STATUS_UPGRADE_OUT_OF_MEMORY
+                        ? View.VISIBLE
+                        : View.GONE);
+        return mProviderStatus == ProviderStatus.STATUS_NORMAL;
+    }
+
+    private void configureImportFailureView(View importFailureView) {
+
+        OnClickListener listener = new OnClickListener(){
+
+            public void onClick(View v) {
+                switch(v.getId()) {
+                    case R.id.import_failure_uninstall_apps: {
+                        // TODO break into a separate method
+                        getActivity().startActivity(
+                                new Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS));
+                        break;
+                    }
+                    case R.id.import_failure_retry_upgrade: {
+                        // Send a provider status update, which will trigger a retry
+                        ContentValues values = new ContentValues();
+                        values.put(ProviderStatus.STATUS, ProviderStatus.STATUS_UPGRADING);
+                        getActivity().getContentResolver().update(ProviderStatus.CONTENT_URI,
+                                values, null, null);
+                        break;
+                    }
+                }
+            }};
+
+        Button uninstallApps = (Button) findViewById(R.id.import_failure_uninstall_apps);
+        uninstallApps.setOnClickListener(listener);
+
+        Button retryUpgrade = (Button) findViewById(R.id.import_failure_retry_upgrade);
+        retryUpgrade.setOnClickListener(listener);
+    }
+
+    private View findViewById(int id) {
+        return mView.findViewById(id);
     }
 
     // TODO: fix PluralRules to handle zero correctly and use Resources.getQuantityText directly
@@ -479,5 +682,35 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
                     .getQuantityText(pluralResourceId, count).toString();
             return String.format(format, count);
         }
+    }
+
+    protected void setEmptyText(int resourceId) {
+        TextView empty = (TextView) getEmptyView().findViewById(R.id.emptyText);
+        empty.setText(getActivity().getText(resourceId));
+        empty.setVisibility(View.VISIBLE);
+    }
+
+    // TODO redesign into an async task or loader
+    protected boolean isSyncActive() {
+        Account[] accounts = AccountManager.get(getActivity()).getAccounts();
+        if (accounts != null && accounts.length > 0) {
+            IContentService contentService = ContentResolver.getContentService();
+            for (Account account : accounts) {
+                try {
+                    if (contentService.isSyncActive(account, ContactsContract.AUTHORITY)) {
+                        return true;
+                    }
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Could not get the sync status");
+                }
+            }
+        }
+        return false;
+    }
+
+    protected boolean hasIccCard() {
+        TelephonyManager telephonyManager =
+                (TelephonyManager)getActivity().getSystemService(Context.TELEPHONY_SERVICE);
+        return telephonyManager.hasIccCard();
     }
 }

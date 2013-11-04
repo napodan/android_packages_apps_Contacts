@@ -43,12 +43,7 @@ public class StrequentContactListFragment extends ContactBrowseListFragment
                 new StrequentContactListAdapter(getActivity(), CALL_BUTTON_ID);
         adapter.setSectionHeaderDisplayEnabled(false);
         adapter.setDisplayPhotos(true);
-
-        adapter.setContactNameDisplayOrder(getContactNameDisplayOrder());
-        adapter.setSortOrder(getSortOrder());
-
         adapter.setQuickContactEnabled(true);
-
         adapter.setCallButtonListener(this);
 
         return adapter;
@@ -57,6 +52,11 @@ public class StrequentContactListFragment extends ContactBrowseListFragment
     @Override
     protected View inflateView(LayoutInflater inflater, ViewGroup container) {
         return inflater.inflate(R.layout.contacts_list_content, null);
+    }
+
+    @Override
+    protected void prepareEmptyView() {
+        setEmptyText(R.string.noFavoritesHelpText);
     }
 
     public void onClick(View v) {

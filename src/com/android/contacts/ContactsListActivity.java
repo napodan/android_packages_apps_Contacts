@@ -24,7 +24,6 @@ import com.android.contacts.list.ContactItemListAdapter;
 import com.android.contacts.list.ContactPickerFragment;
 import com.android.contacts.list.ContactsIntentResolver;
 import com.android.contacts.list.DefaultContactBrowseListFragment;
-import com.android.contacts.list.DefaultContactListFragment;
 import com.android.contacts.list.MultiplePhonePickerFragment;
 import com.android.contacts.list.OnContactBrowserActionListener;
 import com.android.contacts.list.OnContactPickerActionListener;
@@ -35,9 +34,7 @@ import com.android.contacts.list.PostalAddressPickerFragment;
 import com.android.contacts.list.StrequentContactListFragment;
 import com.android.contacts.model.ContactsSource;
 import com.android.contacts.model.Sources;
-import com.android.contacts.ui.ContactsPreferences;
 import com.android.contacts.ui.ContactsPreferencesActivity;
-import com.android.contacts.ui.ContactsPreferencesActivity.Prefs;
 import com.android.contacts.util.AccountSelectionUtil;
 import com.android.contacts.widget.ContextMenuAdapter;
 
@@ -54,16 +51,12 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.UriMatcher;
 import android.content.res.Resources;
-import android.database.ContentObserver;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.preference.PreferenceManager;
 import android.provider.ContactsContract;
 import android.provider.Settings;
 import android.provider.Contacts.ContactMethods;
@@ -74,7 +67,6 @@ import android.provider.ContactsContract.ContactCounts;
 import android.provider.ContactsContract.Contacts;
 import android.provider.ContactsContract.Data;
 import android.provider.ContactsContract.Intents;
-import android.provider.ContactsContract.ProviderStatus;
 import android.provider.ContactsContract.RawContacts;
 import android.provider.ContactsContract.SearchSnippetColumns;
 import android.provider.ContactsContract.CommonDataKinds.Email;
@@ -92,9 +84,7 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.View.OnClickListener;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
 import android.widget.ListAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -108,9 +98,7 @@ import java.util.List;
  * Displays a list of contacts. Usually is embedded into the ContactsActivity.
  */
 @SuppressWarnings("deprecation")
-public class ContactsListActivity extends Activity implements View.OnCreateContextMenuListener,
-        View.OnClickListener,
-        ContactsApplicationController {
+public class ContactsListActivity extends Activity implements View.OnCreateContextMenuListener {
 
     private static final String TAG = "ContactsListActivity";
 
@@ -350,11 +338,8 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
     public int mMode = MODE_DEFAULT;
     private boolean mRunQueriesSynchronously;
     protected QueryHandler mQueryHandler;
-    private boolean mJustCreated;
-    private boolean mSyncEnabled;
     Uri mSelectedContactUri;
 
-//    private boolean mDisplayAll;
     public boolean mDisplayOnlyPhones;
 
     private String mGroupName;
@@ -373,8 +358,6 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
     public static final int QUERY_MODE_NONE = -1;
     private static final int QUERY_MODE_MAILTO = 1;
     private static final int QUERY_MODE_TEL = 2;
-
-    public int mProviderStatus = ProviderStatus.STATUS_NORMAL;
 
     public boolean mSearchMode;
     public boolean mSearchResultsMode;
@@ -411,18 +394,8 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
     }
 
     // The size of a home screen shortcut icon.
-    private int mIconSize;
-    private ContactsPreferences mContactsPrefs;
     public int mDisplayOrder;
     private int mSortOrder;
-
-    private ContentObserver mProviderStatusObserver = new ContentObserver(new Handler()) {
-
-        @Override
-        public void onChange(boolean selfChange) {
-            checkProviderState(true);
-        }
-    };
 
     private ContactsIntentResolver mIntentResolver;
     protected ContactEntryListFragment mListFragment;
@@ -432,7 +405,7 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
     protected CallOrSmsInitiator mCallOrSmsInitiator;
 
     public ContactsListActivity() {
-        mIntentResolver = new ContactsIntentResolver(this, this);
+        mIntentResolver = new ContactsIntentResolver(this);
     }
 
     /**
@@ -446,16 +419,8 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
     protected void onCreate(Bundle icicle) {
         super.onCreate(icicle);
 
-        mIconSize = getResources().getDimensionPixelSize(android.R.dimen.app_icon_size);
-        mContactsPrefs = new ContactsPreferences(this);
-
-        mQueryHandler = new QueryHandler(this);
-        mJustCreated = true;
-        mSyncEnabled = true;
-
         // Resolve the intent
         final Intent intent = getIntent();
-
         if (!resolveIntent(intent)) {
             return;
         }
@@ -492,7 +457,6 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
         mSearchMode = mIntentResolver.mSearchMode;
         mShowSearchSnippets = mIntentResolver.mShowSearchSnippets;
         mInitialFilter = mIntentResolver.mInitialFilter;
-        mDisplayOnlyPhones = mIntentResolver.mDisplayOnlyPhones;
         mShortcutAction = mIntentResolver.mShortcutAction;
         mSearchResultsMode = mIntentResolver.mSearchResultsMode;
         mShowNumberOfContacts = mIntentResolver.mShowNumberOfContacts;
@@ -643,6 +607,8 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
                 mListFragment = fragment;
                 break;
             }
+            case MODE_LEGACY_PICK_PERSON:
+            case MODE_LEGACY_PICK_OR_CREATE_PERSON:
             case MODE_PICK_CONTACT:
             case MODE_PICK_OR_CREATE_CONTACT: {
                 ContactPickerFragment fragment = new ContactPickerFragment();
@@ -650,8 +616,14 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
                     fragment.setSectionHeaderDisplayEnabled(true);
                 }
 
-                if (mMode == MODE_PICK_OR_CREATE_CONTACT) {
+                if (mMode == MODE_PICK_OR_CREATE_CONTACT
+                        || mMode == MODE_LEGACY_PICK_OR_CREATE_PERSON) {
                     fragment.setCreateContactEnabled(true);
+                }
+
+                if (mMode == MODE_LEGACY_PICK_PERSON ||
+                        mMode == MODE_LEGACY_PICK_OR_CREATE_PERSON) {
+                    fragment.setLegacyCompatibility(true);
                 }
 
                 fragment.setShortcutRequested(mShortcutAction != null);
@@ -685,7 +657,6 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
             }
             case MODE_LEGACY_PICK_PHONE:
             case MODE_PICK_PHONE: {
-                mListFragment = new DefaultContactListFragment();
                 PhoneNumberPickerFragment fragment = new PhoneNumberPickerFragment();
                 if (mMode == MODE_LEGACY_PICK_PHONE) {
                     fragment.setLegacyCompatibility(true);
@@ -716,7 +687,7 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
             case MODE_LEGACY_PICK_POSTAL:
             case MODE_PICK_POSTAL: {
                 PostalAddressPickerFragment fragment = new PostalAddressPickerFragment();
-                if (mMode == MODE_LEGACY_PICK_PHONE) {
+                if (mMode == MODE_LEGACY_PICK_POSTAL) {
                     fragment.setLegacyCompatibility(true);
                 }
                 fragment.setSectionHeaderDisplayEnabled(false);
@@ -741,24 +712,17 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
                 break;
             }
             default: {
-                mListFragment = new DefaultContactListFragment();
-                if (!mSearchMode) {
-                    mListFragment.setSectionHeaderDisplayEnabled(true);
-                }
+                throw new UnsupportedOperationException();
             }
         }
 
         mListFragment.setSearchMode(mSearchMode);
         mListFragment.setSearchResultsMode(mSearchResultsMode);
         mListFragment.setQueryString(mInitialFilter);
-        mListFragment.setContactNameDisplayOrder(mContactsPrefs.getDisplayOrder());
-        mListFragment.setSortOrder(mContactsPrefs.getSortOrder());
 
         if ((mMode & MODE_MASK_SHOW_PHOTOS) == MODE_MASK_SHOW_PHOTOS) {
             mListFragment.setPhotoLoaderEnabled(true);
         }
-
-        mListFragment.setContactsApplicationController(this);
 
         return true;
     }
@@ -775,28 +739,6 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
         finish();
     }
 
-    @Deprecated
-    public void setupListView(ListAdapter adapter, ListView list) {
-        mAdapter = (ContactEntryListAdapter)adapter;
-    }
-
-    /**
-     * Register an observer for provider status changes - we will need to
-     * reflect them in the UI.
-     */
-    private void registerProviderStatusObserver() {
-        getContentResolver().registerContentObserver(ProviderStatus.CONTENT_URI,
-                false, mProviderStatusObserver);
-    }
-
-    /**
-     * Register an observer for provider status changes - we will need to
-     * reflect them in the UI.
-     */
-    private void unregisterProviderStatusObserver() {
-        getContentResolver().unregisterContentObserver(mProviderStatusObserver);
-    }
-
     public int getSummaryDisplayNameColumnIndex() {
         if (mDisplayOrder == ContactsContract.Preferences.DISPLAY_ORDER_PRIMARY) {
             return SUMMARY_DISPLAY_NAME_PRIMARY_COLUMN_INDEX;
@@ -805,212 +747,9 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
         }
     }
 
-    /** {@inheritDoc} */
-    public void onClick(View v) {
-        int id = v.getId();
-        switch (id) {
-            // TODO a better way of identifying the button
-            case android.R.id.button1: {
-                final int position = (Integer)v.getTag();
-                Cursor c = mAdapter.getCursor();
-                if (c != null) {
-                    c.moveToPosition(position);
-                    callContact(c);
-                }
-                break;
-            }
-        }
-    }
-
-    /**
-     * Sets the mode when the request is for "default"
-     */
-    private void setDefaultMode() {
-        // Load the preferences
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-
-        mDisplayOnlyPhones = prefs.getBoolean(Prefs.DISPLAY_ONLY_PHONES,
-                Prefs.DISPLAY_ONLY_PHONES_DEFAULT);
-    }
-
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-
-        mContactsPrefs.registerChangeListener(mPreferencesChangeListener);
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        unregisterProviderStatusObserver();
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-
-        // Move to the fragment
-        if (mListFragment != null) {
-            mListFragment.setContactNameDisplayOrder(mContactsPrefs.getDisplayOrder());
-            mListFragment.setSortOrder(mContactsPrefs.getSortOrder());
-        }
-
-        // TODO move this to onAttach of the corresponding fragment
-        mListView = (ListView) findViewById(android.R.id.list);
-
-        View emptyView = mListView.getEmptyView();
-        if (emptyView instanceof ContactListEmptyView) {
-            mEmptyView = (ContactListEmptyView)emptyView;
-        }
-
-        registerProviderStatusObserver();
-
-        Activity parent = getParent();
-
-        // Do this before setting the filter. The filter thread relies
-        // on some state that is initialized in setDefaultMode
-        if (mMode == MODE_DEFAULT) {
-            // If we're in default mode we need to possibly reset the mode due to a change
-            // in the preferences activity while we weren't running
-            setDefaultMode();
-        }
-
-        if (!mSearchMode && !checkProviderState(mJustCreated)) {
-            return;
-        }
-
-        if (mJustCreated) {
-            // We need to start a query here the first time the activity is launched, as long
-            // as we aren't doing a filter.
-            startQuery();
-        }
-        mJustCreated = false;
-        mSearchInitiated = false;
-    }
-
-    /**
-     * Obtains the contacts provider status and configures the UI accordingly.
-     *
-     * @param loadData true if the method needs to start a query when the
-     *            provider is in the normal state
-     * @return true if the provider status is normal
-     */
-    private boolean checkProviderState(boolean loadData) {
-        View importFailureView = findViewById(R.id.import_failure);
-        if (importFailureView == null) {
-            return true;
-        }
-
-        TextView messageView = (TextView) findViewById(R.id.emptyText);
-
-        // This query can be performed on the UI thread because
-        // the API explicitly allows such use.
-        Cursor cursor = getContentResolver().query(ProviderStatus.CONTENT_URI,
-                new String[] { ProviderStatus.STATUS, ProviderStatus.DATA1 }, null, null, null);
-        if (cursor != null) {
-            try {
-                if (cursor.moveToFirst()) {
-                    int status = cursor.getInt(0);
-                    if (status != mProviderStatus) {
-                        mProviderStatus = status;
-                        switch (status) {
-                            case ProviderStatus.STATUS_NORMAL:
-                                mAdapter.notifyDataSetInvalidated();
-                                if (loadData) {
-                                    startQuery();
-                                }
-                                break;
-
-                            case ProviderStatus.STATUS_CHANGING_LOCALE:
-                                messageView.setText(R.string.locale_change_in_progress);
-                                mAdapter.changeCursor(null);
-                                mAdapter.notifyDataSetInvalidated();
-                                break;
-
-                            case ProviderStatus.STATUS_UPGRADING:
-                                messageView.setText(R.string.upgrade_in_progress);
-                                mAdapter.changeCursor(null);
-                                mAdapter.notifyDataSetInvalidated();
-                                break;
-
-                            case ProviderStatus.STATUS_UPGRADE_OUT_OF_MEMORY:
-                                long size = cursor.getLong(1);
-                                String message = getResources().getString(
-                                        R.string.upgrade_out_of_memory, new Object[] {size});
-                                messageView.setText(message);
-                                configureImportFailureView(importFailureView);
-                                mAdapter.changeCursor(null);
-                                mAdapter.notifyDataSetInvalidated();
-                                break;
-                        }
-                    }
-                }
-            } finally {
-                cursor.close();
-            }
-        }
-
-        importFailureView.setVisibility(
-                mProviderStatus == ProviderStatus.STATUS_UPGRADE_OUT_OF_MEMORY
-                        ? View.VISIBLE
-                        : View.GONE);
-        return mProviderStatus == ProviderStatus.STATUS_NORMAL;
-    }
-
-    private void configureImportFailureView(View importFailureView) {
-
-        OnClickListener listener = new OnClickListener(){
-
-            public void onClick(View v) {
-                switch(v.getId()) {
-                    case R.id.import_failure_uninstall_apps: {
-                        startActivity(new Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS));
-                        break;
-                    }
-                    case R.id.import_failure_retry_upgrade: {
-                        // Send a provider status update, which will trigger a retry
-                        ContentValues values = new ContentValues();
-                        values.put(ProviderStatus.STATUS, ProviderStatus.STATUS_UPGRADING);
-                        getContentResolver().update(ProviderStatus.CONTENT_URI, values, null, null);
-                        break;
-                    }
-                }
-            }};
-
-        Button uninstallApps = (Button) findViewById(R.id.import_failure_uninstall_apps);
-        uninstallApps.setOnClickListener(listener);
-
-        Button retryUpgrade = (Button) findViewById(R.id.import_failure_retry_upgrade);
-        retryUpgrade.setOnClickListener(listener);
-    }
-
-    @Override
-    protected void onRestart() {
-        super.onRestart();
-
-        if (!checkProviderState(false)) {
-            return;
-        }
-
-        // The cursor was killed off in onStop(), so we need to get a new one here
-        // We do not perform the query if a filter is set on the list because the
-        // filter will cause the query to happen anyway
-        if (TextUtils.isEmpty(mListFragment.getQueryString())) {
-            startQuery();
-        } else {
-            // Run the filtered query on the adapter
-            mAdapter.onContentChanged();
-        }
-    }
-
     @Override
     protected void onStop() {
         super.onStop();
-
-        mContactsPrefs.unregisterChangeListener();
-        mAdapter.changeCursor(null);
 
         if (mMode == MODE_QUERY) {
             // Make sure the search box is closed
@@ -1077,9 +816,10 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
     @Override
     public void startSearch(String initialQuery, boolean selectInitialQuery, Bundle appSearchData,
             boolean globalSearch) {
-        if (mProviderStatus != ProviderStatus.STATUS_NORMAL) {
-            return;
-        }
+// TODO
+//        if (mProviderStatus != ProviderStatus.STATUS_NORMAL) {
+//            return;
+//        }
 
         if (globalSearch) {
             super.startSearch(initialQuery, selectInitialQuery, appSearchData, globalSearch);
@@ -1340,7 +1080,7 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
 
             case SUBACTIVITY_DISPLAY_GROUP:
                 // Mark as just created so we re-run the view query
-                mJustCreated = true;
+//                mJustCreated = true;
                 break;
 
             case SUBACTIVITY_FILTER:
@@ -1705,11 +1445,11 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
      * {@link #mDisplayOnlyPhones} flag.
      */
     private String getContactSelection() {
-        if (mDisplayOnlyPhones) {
-            return CLAUSE_ONLY_VISIBLE + " AND " + CLAUSE_ONLY_PHONES;
-        } else {
+//        if (mDisplayOnlyPhones) {
+//            return CLAUSE_ONLY_VISIBLE + " AND " + CLAUSE_ONLY_PHONES;
+//        } else {
             return CLAUSE_ONLY_VISIBLE;
-        }
+//        }
     }
 
     protected Uri getContactFilterUri(String filter) {
@@ -1781,33 +1521,6 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
 
         // Cancel any pending queries
         mQueryHandler.cancelOperation(QUERY_TOKEN);
-
-        mSortOrder = mContactsPrefs.getSortOrder();
-        mDisplayOrder = mContactsPrefs.getDisplayOrder();
-
-        if (mListFragment != null) {
-            mListFragment.setContactNameDisplayOrder(mDisplayOrder);
-            mListFragment.setSortOrder(mSortOrder);
-        }
-
-        if (mListView instanceof ContactEntryListView) {
-            ContactEntryListView listView = (ContactEntryListView)mListView;
-
-            // When sort order and display order contradict each other, we want to
-            // highlight the part of the name used for sorting.
-            if (mSortOrder == ContactsContract.Preferences.SORT_ORDER_PRIMARY &&
-                    mDisplayOrder == ContactsContract.Preferences.DISPLAY_ORDER_ALTERNATIVE) {
-                listView.setHighlightNamesWhenScrolling(true);
-                mAdapter.setNameHighlightingEnabled(true);
-            } else if (mSortOrder == ContactsContract.Preferences.SORT_ORDER_ALTERNATIVE &&
-                    mDisplayOrder == ContactsContract.Preferences.DISPLAY_ORDER_PRIMARY) {
-                listView.setHighlightNamesWhenScrolling(true);
-                mAdapter.setNameHighlightingEnabled(true);
-            } else {
-                listView.setHighlightNamesWhenScrolling(false);
-                mAdapter.setNameHighlightingEnabled(false);
-            }
-        }
 
         String[] projection = getProjectionForQuery();
         if (mSearchMode && TextUtils.isEmpty(mListFragment.getQueryString())) {
@@ -2149,9 +1862,6 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
 
     protected void onQueryComplete(Cursor cursor) {
         mAdapter.changeCursor(cursor);
-
-        // TODO make this triggered by the Loader
-        mListFragment.completeRestoreInstanceState();
     }
 
     private CallOrSmsInitiator getCallOrSmsInitiator() {
@@ -2159,5 +1869,17 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
             mCallOrSmsInitiator = new CallOrSmsInitiator(this);
         }
         return mCallOrSmsInitiator;
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        mListFragment.onSaveInstanceState(outState);
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+        mListFragment.onRestoreInstanceState(savedInstanceState);
     }
 }
