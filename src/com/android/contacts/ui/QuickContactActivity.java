@@ -16,8 +16,6 @@
 
 package com.android.contacts.ui;
 
-import com.android.contacts.StickyTabs;
-
 import android.app.Activity;
 import android.content.ContentUris;
 import android.content.Intent;
@@ -63,7 +61,6 @@ public final class QuickContactActivity extends Activity implements
             if (LOGV) Log.d(TAG, "Preparing window");
             mQuickContact = new QuickContactWindow(this, this);
         }
-        mQuickContact.setLastSelectedContactsAppTab(StickyTabs.getTab(intent));
 
         // Use our local window token for now
         Uri lookupUri = intent.getData();

@@ -55,15 +55,16 @@ public class PhoneDisambigDialog implements DialogInterface.OnClickListener,
     private Context mContext;
     private AlertDialog mDialog;
     private boolean mSendSms;
-    private int mStickyTab;
     private ListAdapter mPhonesAdapter;
     private ArrayList<PhoneItem> mPhoneItemList;
 
-    public PhoneDisambigDialog(Context context, Cursor phonesCursor, boolean sendSms,
-            int stickyTab) {
+    public PhoneDisambigDialog(Context context, Cursor phonesCursor) {
+        this(context, phonesCursor, false /*make call*/);
+    }
+
+    public PhoneDisambigDialog(Context context, Cursor phonesCursor, boolean sendSms) {
         mContext = context;
         mSendSms = sendSms;
-        mStickyTab = stickyTab;
 
         mPhoneItemList = makePhoneItemsList(phonesCursor);
         phonesCursor.close();
@@ -121,7 +122,6 @@ public class PhoneDisambigDialog implements DialogInterface.OnClickListener,
             if (mSendSms) {
                 ContactsUtils.initiateSms(mContext, phone);
             } else {
-                StickyTabs.saveTab(mContext, mStickyTab);
                 ContactsUtils.initiateCall(mContext, phone);
             }
         } else {
