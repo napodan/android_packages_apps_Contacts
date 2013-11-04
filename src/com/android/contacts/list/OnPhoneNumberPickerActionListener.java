@@ -19,27 +19,22 @@ import android.content.Intent;
 import android.net.Uri;
 
 /**
- * Action callbacks that can be sent by a contact picker.
+ * Action callbacks that can be sent by a phone number picker.
  */
-public interface OnContactPickerActionListener  {
+public interface OnPhoneNumberPickerActionListener  {
+
+    /**
+     * Returns the selected phone number to the requester.
+     */
+    void onPickPhoneNumberAction(Uri dataUri);
+
+    /**
+     * Returns the selected number as a shortcut intent.
+     */
+    void onShortcutIntentCreated(Intent intent);
 
     /**
      * Searches all contacts for the specified string an show results for browsing.
      */
     void onSearchAllContactsAction(String string);
-
-    /**
-     * Creates a new contact and then returns it to the caller.
-     */
-    void onCreateNewContactAction();
-
-    /**
-     * Returns the selected contact to the requester.
-     */
-    void onPickContactAction(Uri contactUri);
-
-    /**
-     * Returns the selected contact as a shortcut intent.
-     */
-    void onShortcutIntentCreated(Intent intent);
 }

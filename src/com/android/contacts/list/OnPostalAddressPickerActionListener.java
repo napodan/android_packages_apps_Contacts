@@ -15,31 +15,20 @@
  */
 package com.android.contacts.list;
 
-import android.content.Intent;
 import android.net.Uri;
 
 /**
- * Action callbacks that can be sent by a contact picker.
+ * Action callbacks that can be sent by a postal address picker.
  */
-public interface OnContactPickerActionListener  {
+public interface OnPostalAddressPickerActionListener  {
+
+    /**
+     * Returns the selected phone number to the requester.
+     */
+    void onPickPostalAddressAction(Uri dataUri);
 
     /**
      * Searches all contacts for the specified string an show results for browsing.
      */
     void onSearchAllContactsAction(String string);
-
-    /**
-     * Creates a new contact and then returns it to the caller.
-     */
-    void onCreateNewContactAction();
-
-    /**
-     * Returns the selected contact to the requester.
-     */
-    void onPickContactAction(Uri contactUri);
-
-    /**
-     * Returns the selected contact as a shortcut intent.
-     */
-    void onShortcutIntentCreated(Intent intent);
 }
