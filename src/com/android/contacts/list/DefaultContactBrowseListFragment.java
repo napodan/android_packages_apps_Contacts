@@ -16,10 +16,7 @@
 package com.android.contacts.list;
 
 import com.android.contacts.R;
-import com.android.contacts.ui.ContactsPreferences;
-import com.android.contacts.ui.ContactsPreferencesActivity.Prefs;
 
-import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -34,31 +31,36 @@ public class DefaultContactBrowseListFragment extends ContactBrowseListFragment 
 
     private boolean mEditMode;
     private boolean mCreateContactEnabled;
-    private boolean mContactsWithPhoneNumbersOnly;
+    private boolean mContactsWithPhonesOnlyRestrictionEnabled;
+    private boolean mVisibleContactsRestrictionEnabled = true;
+
+    // TODO: Remove this horrible hack once the framework can lookup fragments via findFragmentById
+    public static DefaultContactBrowseListFragment sLastFragment = null;
+
+
+    public DefaultContactBrowseListFragment() {
+        setPhotoLoaderEnabled(true);
+
+        sLastFragment = this;
+    }
 
     @Override
     protected void prepareEmptyView() {
-        if (mContactsWithPhoneNumbersOnly) {
+        if (mContactsWithPhonesOnlyRestrictionEnabled) {
             setEmptyText(R.string.noContactsWithPhoneNumbers);
         } else {
             super.prepareEmptyView();
         }
     }
 
-    @Override
-    protected void loadPreferences(SharedPreferences prefs, ContactsPreferences contactsPrefs) {
-        super.loadPreferences(prefs, contactsPrefs);
-
-        setContactsWithPhoneNumbersOnly(prefs.getBoolean(Prefs.DISPLAY_ONLY_PHONES,
-                Prefs.DISPLAY_ONLY_PHONES_DEFAULT));
+    public void setContactsWithPhonesOnlyRestrictionEnabled(boolean flag) {
+        mContactsWithPhonesOnlyRestrictionEnabled = flag;
+        configureAdapter();
     }
 
-    public void setContactsWithPhoneNumbersOnly(boolean flag) {
-        mContactsWithPhoneNumbersOnly = flag;
-        ContactListAdapter adapter = getAdapter();
-        if (adapter != null) {
-            ((DefaultContactListAdapter)adapter).setContactsWithPhoneNumbersOnly(flag);
-        }
+    public void setVisibleContactsRestrictionEnabled(boolean flag) {
+        mVisibleContactsRestrictionEnabled = flag;
+        configureAdapter();
     }
 
     @Override
@@ -87,7 +89,6 @@ public class DefaultContactBrowseListFragment extends ContactBrowseListFragment 
         adapter.setSectionHeaderDisplayEnabled(isSectionHeaderDisplayEnabled());
         adapter.setDisplayPhotos(true);
         adapter.setQuickContactEnabled(true);
-
         return adapter;
     }
 
@@ -96,7 +97,10 @@ public class DefaultContactBrowseListFragment extends ContactBrowseListFragment 
         super.configureAdapter();
 
         DefaultContactListAdapter adapter = (DefaultContactListAdapter)getAdapter();
-        adapter.setContactsWithPhoneNumbersOnly(mContactsWithPhoneNumbersOnly);
+        if (adapter != null) {
+            adapter.setContactsWithPhoneNumbersOnly(mContactsWithPhonesOnlyRestrictionEnabled);
+            adapter.setVisibleContactsOnly(mVisibleContactsRestrictionEnabled);
+        }
     }
 
     @Override

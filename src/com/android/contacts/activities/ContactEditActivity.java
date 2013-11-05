@@ -16,6 +16,7 @@
 
 package com.android.contacts.activities;
 
+import com.android.contacts.ContactsSearchManager;
 import com.android.contacts.R;
 import com.android.contacts.util.DialogManager;
 import com.android.contacts.views.edit.ContactEditFragment;
@@ -26,6 +27,8 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
 
 public class ContactEditActivity extends Activity implements
         DialogManager.DialogShowingViewActivity {
@@ -44,7 +47,7 @@ public class ContactEditActivity extends Activity implements
     public void onCreate(Bundle savedState) {
         super.onCreate(savedState);
 
-        setContentView(R.layout.contact_edit);
+        setContentView(R.layout.contact_edit_activity);
 
         final Intent intent = getIntent();
         final String action = intent.getAction();
@@ -52,14 +55,9 @@ public class ContactEditActivity extends Activity implements
         final String mimeType = intent.resolveType(getContentResolver());
         final Bundle intentExtras = intent.getExtras();
 
-        mFragment = new ContactEditFragment(
-                this, findViewById(R.id.contact_edit),
-                action, uri, mimeType, intentExtras,
-                mCallbackHandler);
-
-        openFragmentTransaction()
-            .add(mFragment, R.id.contact_edit)
-            .commit();
+        mFragment = ContactEditFragment.sLastInstance;
+        mFragment.setCallbacks(mCallbackHandler);
+        mFragment.load(action, uri, mimeType, intentExtras);
     }
 
     private class FragmentCallbackHandler implements ContactEditFragment.Callbacks {
@@ -67,7 +65,19 @@ public class ContactEditActivity extends Activity implements
             finish();
         }
 
+        public void closeAfterDelete() {
+            finish();
+        }
+
         public void closeBecauseContactNotFound() {
+            finish();
+        }
+
+        public void closeAfterSplit() {
+            finish();
+        }
+
+        public void closeBecauseAccountSelectorAborted() {
             finish();
         }
 
@@ -101,5 +111,45 @@ public class ContactEditActivity extends Activity implements
         // Nobody knows about the Dialog
         Log.w(TAG, "Unknown dialog requested, id: " + id + ", args: " + args);
         return null;
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        // TODO: This is too hardwired.
+        mFragment.onActivityResult(requestCode, resultCode, data);
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        // TODO: This is too hardwired.
+        if (mFragment.onCreateOptionsMenu(menu, getMenuInflater())) return true;
+
+        return super.onCreateOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean onPrepareOptionsMenu(Menu menu) {
+        // TODO: This is too hardwired.
+        if (mFragment.onPrepareOptionsMenu(menu)) return true;
+
+        return super.onPrepareOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // TODO: This is too hardwired.
+        if (mFragment.onOptionsItemSelected(item)) return true;
+
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public void startSearch(String initialQuery, boolean selectInitialQuery, Bundle appSearchData,
+            boolean globalSearch) {
+        if (globalSearch) {
+            super.startSearch(initialQuery, selectInitialQuery, appSearchData, globalSearch);
+        } else {
+            ContactsSearchManager.startSearch(this, initialQuery);
+        }
     }
 }

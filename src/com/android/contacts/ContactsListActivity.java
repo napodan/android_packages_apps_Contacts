@@ -464,9 +464,9 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
 
         switch (mMode) {
             case MODE_DEFAULT:
+            case MODE_CUSTOM:
             case MODE_INSERT_OR_EDIT_CONTACT:
             case MODE_QUERY_PICK_TO_EDIT:
-            case MODE_FREQUENT:
             case MODE_QUERY: {
                 DefaultContactBrowseListFragment fragment = new DefaultContactBrowseListFragment();
                 if (!mSearchMode) {
@@ -485,6 +485,11 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
                 if (mMode == MODE_QUERY) {
                     fragment.setSearchResultsMode(true);
                 }
+
+                fragment.setContactsWithPhonesOnlyRestrictionEnabled(
+                        mIntentResolver.isContactsWithPhonesOnlyRestrictionEnabled());
+                fragment.setVisibleContactsRestrictionEnabled(!mSearchResultsMode &&
+                        mIntentResolver.isVisibleContactsRestrictionEnabled());
 
                 fragment.setOnContactListActionListener(new OnContactBrowserActionListener() {
                     public void onSearchAllContactsAction(String string) {
@@ -545,9 +550,21 @@ public class ContactsListActivity extends Activity implements View.OnCreateConte
                 mListFragment = fragment;
                 break;
             }
+            case MODE_FREQUENT:
+            case MODE_STARRED:
             case MODE_STREQUENT: {
                 StrequentContactListFragment fragment = new StrequentContactListFragment();
-                fragment.setSectionHeaderDisplayEnabled(false);
+                if (mMode == MODE_FREQUENT) {
+                    fragment.setFrequentlyContactedContactsIncluded(true);
+                    fragment.setStarredContactsIncluded(false);
+                } else if (mMode == MODE_STARRED) {
+                    fragment.setFrequentlyContactedContactsIncluded(false);
+                    fragment.setStarredContactsIncluded(true);
+                } else {
+                    fragment.setFrequentlyContactedContactsIncluded(true);
+                    fragment.setStarredContactsIncluded(true);
+                }
+
                 fragment.setOnContactListActionListener(new OnContactBrowserActionListener() {
                     public void onSearchAllContactsAction(String string) {
                         doSearch();
