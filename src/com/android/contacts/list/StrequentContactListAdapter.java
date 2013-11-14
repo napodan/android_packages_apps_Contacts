@@ -149,11 +149,14 @@ public class StrequentContactListAdapter extends ContactListAdapter {
 
     @Override
     public int getItemViewType(int position) {
-        if (position == mFrequentSeparatorPos) {
+        if (mFrequentSeparatorPos == ListView.INVALID_POSITION
+                || position < mFrequentSeparatorPos) {
+            return super.getItemViewType(position);
+        } else if (position == mFrequentSeparatorPos) {
             return IGNORE_ITEM_VIEW_TYPE;
+        } else {
+            return super.getItemViewType(position - 1);
         }
-
-        return super.getItemViewType(position);
     }
 
     @Override
@@ -174,14 +177,16 @@ public class StrequentContactListAdapter extends ContactListAdapter {
     }
 
     @Override
-    public View newView(Context context, Cursor cursor, ViewGroup parent) {
-        ContactListItemView view = (ContactListItemView)super.newView(context, cursor, parent);
+    protected View newView(Context context, int partition, Cursor cursor, int position,
+            ViewGroup parent) {
+        ContactListItemView view = (ContactListItemView)super.newView(context, partition, cursor,
+                position, parent);
         view.setOnCallButtonClickListener(mCallButtonListener);
         return view;
     }
 
     @Override
-    public void bindView(View itemView, Context context, Cursor cursor) {
+    protected void bindView(View itemView, int partition, Cursor cursor, int position) {
         final ContactListItemView view = (ContactListItemView)itemView;
 
         bindName(view, cursor);
@@ -189,8 +194,7 @@ public class StrequentContactListAdapter extends ContactListAdapter {
         bindPresence(view, cursor);
 
         // Make the call button visible if requested.
-        if (getHasPhoneNumber()) {
-            int position = cursor.getPosition();
+        if (getHasPhoneNumber(position)) {
             view.showCallButton(mCallButtonId, position);
         } else {
             view.hideCallButton();
