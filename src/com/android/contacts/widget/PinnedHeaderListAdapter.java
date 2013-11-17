@@ -25,6 +25,8 @@ import android.view.ViewGroup;
 public abstract class PinnedHeaderListAdapter extends CompositeCursorAdapter
         implements PinnedHeaderListView.PinnedHeaderAdapter {
 
+    public static final int PARTITION_HEADER_TYPE = 0;
+
     private boolean mPinnedPartitionHeadersEnabled;
     private boolean mHeaderVisibility[];
 
@@ -61,12 +63,22 @@ public abstract class PinnedHeaderListAdapter extends CompositeCursorAdapter
      * The default implementation creates the same type of view as a normal
      * partition header.
      */
-    public View createPinnedHeaderView(int partition, ViewGroup parent) {
+    public View getPinnedHeaderView(int partition, View convertView, ViewGroup parent) {
         if (hasHeader(partition)) {
-            View view = newHeaderView(getContext(), partition, null, parent);
-            view.setFocusable(false);
-            view.setEnabled(false);
-            bindHeaderView(view, partition, null);
+            View view = null;
+            if (convertView != null) {
+                Integer headerType = (Integer)convertView.getTag();
+                if (headerType != null && headerType == PARTITION_HEADER_TYPE) {
+                    view = convertView;
+                }
+            }
+            if (view == null) {
+                view = newHeaderView(getContext(), partition, null, parent);
+                view.setTag(PARTITION_HEADER_TYPE);
+                view.setFocusable(false);
+                view.setEnabled(false);
+            }
+            bindHeaderView(view, partition, getCursor(partition));
             return view;
         } else {
             return null;
@@ -92,12 +104,14 @@ public abstract class PinnedHeaderListAdapter extends CompositeCursorAdapter
             }
         }
 
+        int headerViewsCount = listView.getHeaderViewsCount();
+
         // Starting at the top, find and pin headers for partitions preceding the visible one(s)
         int maxTopHeader = -1;
         int topHeaderHeight = 0;
         for (int i = 0; i < size; i++) {
             if (mHeaderVisibility[i]) {
-                int position = listView.getPositionAt(topHeaderHeight);
+                int position = listView.getPositionAt(topHeaderHeight) - headerViewsCount;
                 int partition = getPartitionForPosition(position);
                 if (i > partition) {
                     break;
@@ -115,7 +129,8 @@ public abstract class PinnedHeaderListAdapter extends CompositeCursorAdapter
         int listHeight = listView.getHeight();
         for (int i = size; --i > maxTopHeader;) {
             if (mHeaderVisibility[i]) {
-                int position = listView.getPositionAt(listHeight - bottomHeaderHeight);
+                int position = listView.getPositionAt(listHeight - bottomHeaderHeight)
+                        - headerViewsCount;
                 if (position < 0) {
                     break;
                 }
@@ -138,5 +153,9 @@ public abstract class PinnedHeaderListAdapter extends CompositeCursorAdapter
                 listView.setHeaderInvisible(i);
             }
         }
+    }
+
+    public int getScrollPositionForHeader(int viewIndex) {
+        return getPositionForPartition(viewIndex);
     }
 }

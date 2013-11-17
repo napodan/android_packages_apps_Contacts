@@ -35,6 +35,7 @@ public abstract class IndexerListAdapter extends PinnedHeaderListAdapter impleme
     private int mIndexedPartition = 0;
     private boolean mSectionHeaderDisplayEnabled;
     private View mHeader;
+    private TextView mTitleView;
 
     /**
      * Constructor.
@@ -111,13 +112,16 @@ public abstract class IndexerListAdapter extends PinnedHeaderListAdapter impleme
     }
 
     @Override
-    public View createPinnedHeaderView(int viewIndex, ViewGroup parent) {
+    public View getPinnedHeaderView(int viewIndex, View convertView, ViewGroup parent) {
         if (isSectionHeaderDisplayEnabled() && viewIndex == getPinnedHeaderCount() - 1) {
-            mHeader = LayoutInflater.from(mContext).
-                    inflate(mSectionHeaderLayoutResId, parent, false);
+            if (mHeader == null) {
+                mHeader = LayoutInflater.from(mContext).
+                        inflate(mSectionHeaderLayoutResId, parent, false);
+                mTitleView = (TextView)mHeader.findViewById(mSectionHeaderTextViewId);
+            }
             return mHeader;
         } else {
-            return super.createPinnedHeaderView(viewIndex, parent);
+            return super.getPinnedHeaderView(viewIndex, convertView, parent);
         }
     }
 
@@ -149,12 +153,7 @@ public abstract class IndexerListAdapter extends PinnedHeaderListAdapter impleme
                 listView.setHeaderInvisible(index);
             } else {
                 String title = (String)mIndexer.getSections()[section];
-                TextView titleView = (TextView)mHeader.getTag();
-                if (titleView == null) {
-                    titleView = (TextView)mHeader.findViewById(mSectionHeaderTextViewId);
-                    mHeader.setTag(titleView);
-                }
-                titleView.setText(title);
+                mTitleView.setText(title);
 
                 // Compute the item position where the current partition begins
                 int partitionStart = getPositionForPartition(mIndexedPartition);

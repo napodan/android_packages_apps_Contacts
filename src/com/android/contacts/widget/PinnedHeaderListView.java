@@ -21,6 +21,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AbsListView;
@@ -48,9 +49,9 @@ public class PinnedHeaderListView extends ListView
         int getPinnedHeaderCount();
 
         /**
-         * Creates the pinned header view.
+         * Creates or updates the pinned header view.
          */
-        View createPinnedHeaderView(int viewIndex, ViewGroup parent);
+        View getPinnedHeaderView(int viewIndex, View convertView, ViewGroup parent);
 
         /**
          * Configures the pinned headers to match the visible list items. The
@@ -61,6 +62,12 @@ public class PinnedHeaderListView extends ListView
          * needs to change its position or visibility.
          */
         void configurePinnedHeaders(PinnedHeaderListView listView);
+
+        /**
+         * Returns the list position to scroll to if the pinned header is touched.
+         * Return -1 if the list does not need to be scrolled.
+         */
+        int getScrollPositionForHeader(int viewIndex);
     }
 
     private static final int MAX_ALPHA = 255;
@@ -78,12 +85,14 @@ public class PinnedHeaderListView extends ListView
     }
 
     private PinnedHeaderAdapter mAdapter;
+    private int mSize;
     private PinnedHeader[] mHeaders;
     private int mPinnedHeaderBackgroundColor;
     private RectF mBounds = new RectF();
     private Paint mPaint = new Paint();
     private OnScrollListener mOnScrollListener;
     private OnItemSelectedListener mOnItemSelectedListener;
+    private int mScrollState;
 
     public PinnedHeaderListView(Context context) {
         this(context, null, com.android.internal.R.attr.listViewStyle);
@@ -113,24 +122,8 @@ public class PinnedHeaderListView extends ListView
 
     @Override
     public void setAdapter(ListAdapter adapter) {
-        super.setAdapter(adapter);
         mAdapter = (PinnedHeaderAdapter)adapter;
-        int count = mAdapter.getPinnedHeaderCount();
-        mHeaders = new PinnedHeader[count];
-        for (int i = 0; i < count; i++) {
-            PinnedHeader header = new PinnedHeader();
-            header.view = mAdapter.createPinnedHeaderView(i, this);
-            mHeaders[i] = header;
-        }
-
-        // Disable vertical fading when the pinned header is present
-        // TODO change ListView to allow separate measures for top and bottom fading edge;
-        // in this particular case we would like to disable the top, but not the bottom edge.
-        if (count > 0) {
-            setFadingEdgeLength(0);
-        }
-
-        requestLayout();
+        super.setAdapter(adapter);
     }
 
     @Override
@@ -148,6 +141,32 @@ public class PinnedHeaderListView extends ListView
     public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount,
             int totalItemCount) {
         if (mAdapter != null) {
+            int count = mAdapter.getPinnedHeaderCount();
+            if (count != mSize) {
+                mSize = count;
+                if (mHeaders == null) {
+                    mHeaders = new PinnedHeader[mSize];
+                } else if (mHeaders.length < mSize) {
+                    PinnedHeader[] headers = mHeaders;
+                    mHeaders = new PinnedHeader[mSize];
+                    System.arraycopy(headers, 0, mHeaders, 0, headers.length);
+                }
+            }
+
+            for (int i = 0; i < mSize; i++) {
+                if (mHeaders[i] == null) {
+                    mHeaders[i] = new PinnedHeader();
+                }
+                mHeaders[i].view = mAdapter.getPinnedHeaderView(i, mHeaders[i].view, this);
+            }
+
+            // Disable vertical fading when the pinned header is present
+            // TODO change ListView to allow separate measures for top and bottom fading edge;
+            // in this particular case we would like to disable the top, but not the bottom edge.
+            if (mSize > 0) {
+                setFadingEdgeLength(0);
+            }
+
             mAdapter.configurePinnedHeaders(this);
         }
         if (mOnScrollListener != null) {
@@ -156,6 +175,7 @@ public class PinnedHeaderListView extends ListView
     }
 
     public void onScrollStateChanged(AbsListView view, int scrollState) {
+        mScrollState = scrollState;
         if (mOnScrollListener != null) {
             mOnScrollListener.onScrollStateChanged(this, scrollState);
         }
@@ -172,7 +192,7 @@ public class PinnedHeaderListView extends ListView
         int windowBottom = height;
 
         int prevHeaderBottom = 0;
-        for (int i = 0; i < mHeaders.length; i++) {
+        for (int i = 0; i < mSize; i++) {
             PinnedHeader header = mHeaders[i];
             if (header.visible) {
                 if (header.state == TOP) {
@@ -271,8 +291,15 @@ public class PinnedHeaderListView extends ListView
     private void ensurePinnedHeaderLayout(int viewIndex) {
         View view = mHeaders[viewIndex].view;
         if (view.isLayoutRequested()) {
-            view.measure(MeasureSpec.makeMeasureSpec(getWidth(), MeasureSpec.EXACTLY),
-                    MeasureSpec.UNSPECIFIED);
+            int widthSpec = MeasureSpec.makeMeasureSpec(getWidth(), MeasureSpec.EXACTLY);
+            int heightSpec;
+            int lpHeight = view.getLayoutParams().height;
+            if (lpHeight > 0) {
+                heightSpec = MeasureSpec.makeMeasureSpec(lpHeight, MeasureSpec.EXACTLY);
+            } else {
+                heightSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+            }
+            view.measure(widthSpec, heightSpec);
             int height = view.getMeasuredHeight();
             mHeaders[viewIndex].height = height;
             view.layout(0, 0, view.getMeasuredWidth(), height);
@@ -283,7 +310,7 @@ public class PinnedHeaderListView extends ListView
      * Returns the sum of heights of headers pinned to the top.
      */
     public int getTotalTopPinnedHeaderHeight() {
-        for (int i = mHeaders.length; --i >= 0;) {
+        for (int i = mSize; --i >= 0;) {
             PinnedHeader header = mHeaders[i];
             if (header.visible && header.state == TOP) {
                 return header.y + header.height;
@@ -309,9 +336,52 @@ public class PinnedHeaderListView extends ListView
     }
 
     @Override
+    public boolean onInterceptTouchEvent(MotionEvent ev) {
+        if (mScrollState == SCROLL_STATE_IDLE) {
+            final int y = (int)ev.getY();
+            for (int i = mSize; --i >= 0;) {
+                PinnedHeader header = mHeaders[i];
+                if (header.visible && header.y <= y && header.y + header.height > y) {
+                    if (ev.getAction() == MotionEvent.ACTION_DOWN) {
+                        return smoothScrollToPartition(i);
+                    } else {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return super.onInterceptTouchEvent(ev);
+    }
+
+    private boolean smoothScrollToPartition(int partition) {
+        final int position = mAdapter.getScrollPositionForHeader(partition);
+        if (position == -1) {
+            return false;
+        }
+
+        smoothScrollToSelectionFromTop(position + getHeaderViewsCount(),
+                getTotalTopPinnedHeaderHeight());
+        return true;
+    }
+
+    public void smoothScrollToSelectionFromTop(final int position, int y) {
+        // This method is temporary.  It will be replaced by new method on AbsListView
+        smoothScrollToPosition(position);
+
+        final int offset = y;
+        postDelayed(new Runnable() {
+
+            public void run() {
+                setSelectionFromTop(position, offset);
+            }
+        }, 500);
+    }
+
+    @Override
     protected void dispatchDraw(Canvas canvas) {
         super.dispatchDraw(canvas);
-        for (int i = mHeaders.length; --i >= 0;) {
+        for (int i = mSize; --i >= 0;) {
             PinnedHeader header = mHeaders[i];
             if (header.visible) {
                 View view = header.view;
