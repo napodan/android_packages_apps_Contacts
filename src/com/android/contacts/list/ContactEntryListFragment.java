@@ -338,13 +338,30 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
         } else {
             mAdapter.configureLoader(loader, partition.getDirectoryId());
             if (forceLoad) {
+                loader.cancelLoad();
                 loader.forceLoad();
             }
         }
     }
 
     protected void reloadData() {
+        mAdapter.onDataReload();
         if (mDirectoryPartitions.size() > 0) {
+            // We need to cancel _all_ current queries and then launch
+            // a new query for the 0th partition.
+
+            CursorLoader directoryLoader = (CursorLoader)getLoader(DIRECTORY_LOADER_ID);
+            if (directoryLoader != null) {
+                directoryLoader.cancelLoad();
+            }
+            int size = mDirectoryPartitions.size();
+            for (int i = 0; i < size; i++) {
+                CursorLoader loader = (CursorLoader)getLoader(i);
+                if (loader != null) {
+                    loader.cancelLoad();
+                }
+            }
+
             startLoading(mDirectoryPartitions.get(0), true);
         }
     }
@@ -407,6 +424,9 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
                 mAdapter.setSearchMode(flag);
                 mAdapter.setPinnedPartitionHeadersEnabled(flag);
                 mInitialLoadComplete = false;
+            }
+            if (mListView != null) {
+                mListView.setFastScrollEnabled(!flag);
             }
         }
     }
@@ -536,6 +556,7 @@ public abstract class ContactEntryListFragment<T extends ContactEntryListAdapter
         mListView.setOnItemClickListener(this);
         mListView.setOnFocusChangeListener(this);
         mListView.setOnTouchListener(this);
+        mListView.setFastScrollEnabled(!isSearchMode());
 
         // Tell list view to not show dividers. We'll do it ourself so that we can *not* show
         // them when an A-Z headers is visible.
