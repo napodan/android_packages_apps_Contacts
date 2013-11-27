@@ -35,7 +35,7 @@ import android.widget.TextView;
  */
 public class StrequentContactListAdapter extends ContactListAdapter {
 
-    private int mFrequentSeparatorPos;
+    private int mFrequentSeparatorPos = ListView.INVALID_POSITION;
     private TextView mSeparatorView;
     private OnClickListener mCallButtonListener;
     private int mCallButtonId;
@@ -83,8 +83,17 @@ public class StrequentContactListAdapter extends ContactListAdapter {
     }
 
     @Override
-    public void changeCursor(Cursor cursor) {
-        super.changeCursor(cursor);
+    protected void invalidate() {
+        super.invalidate();
+
+        // Sometimes the adapter is invalidated without calling changeCursor,
+        // need to reset the separator position then.
+        mFrequentSeparatorPos = ListView.INVALID_POSITION;
+    }
+
+    @Override
+    public void changeCursor(int partition, Cursor cursor) {
+        super.changeCursor(partition, cursor);
 
         // Get the split between starred and frequent items, if the mode is strequent
         mFrequentSeparatorPos = ListView.INVALID_POSITION;
