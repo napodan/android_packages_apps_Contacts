@@ -55,9 +55,18 @@
     <!-- For ContactsListActivity -->
     <item type="id" name="dialog_delete_contact_confirmation"/>
 
+    <!-- For ImportExportInteraction -->
+    <item type="id" name="dialog_import_export_options"/>
+
     <!-- For ExportVCardActivity -->
     <item type="id" name="dialog_export_confirmation"/>
     <item type="id" name="dialog_exporting_vcard"/>
     <item type="id" name="dialog_fail_to_export_with_reason"/>
+
+    <!-- For PhoneNumberCallInteraction -->
+    <item type="id" name="dialog_phone_number_call_disambiguation"/>
+
+    <!-- For PhoneNumberMessageSendInteraction -->
+    <item type="id" name="dialog_phone_number_message_disambiguation"/>
 
 </resources>
