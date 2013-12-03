@@ -163,8 +163,8 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- The actual list of contacts, usually embedded in ContactsActivity -->
-        <activity android:name="ContactsListActivity"
+        <!-- The actual list of contacts -->
+        <activity android:name=".activities.ContactListActivity"
             android:label="@string/contactsList"
             android:clearTaskOnLaunch="true"
         >
@@ -209,7 +209,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.TAB" />
             </intent-filter>
-
+        </activity>
+        
+        <activity android:name=".activities.ContactSelectionActivity"
+            android:label="@string/contactsList"
+            android:clearTaskOnLaunch="true"
+        >
             <intent-filter>
                 <action android:name="android.intent.action.INSERT_OR_EDIT" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -240,6 +245,11 @@
                 <data android:mimeType="vnd.android.cursor.item/postal-address" android:host="contacts" />
             </intent-filter>
         </activity>
+
+        <!-- Backwards compatibility: somebody may have hard coded this activity name -->
+        <activity-alias android:name="ContactsListActivity"
+            android:targetActivity=".activities.ContactListActivity"
+        />
 
         <!-- An activity for joining contacts -->
         <activity android:name="JoinContactActivity"
@@ -323,7 +333,7 @@
         </activity>
 
         <activity-alias android:name="ContactShortcut"
-            android:targetActivity="ContactsListActivity"
+            android:targetActivity=".activities.ContactSelectionActivity"
             android:label="@string/shortcutContact"
             android:icon="@drawable/ic_launcher_shortcut_contact">
 
@@ -335,7 +345,7 @@
         </activity-alias>
 
         <activity-alias android:name="alias.DialShortcut"
-            android:targetActivity="ContactsListActivity"
+            android:targetActivity=".activities.ContactSelectionActivity"
             android:label="@string/shortcutDialContact"
             android:icon="@drawable/ic_launcher_shortcut_directdial">
 
@@ -348,7 +358,7 @@
         </activity-alias>
 
         <activity-alias android:name="alias.MessageShortcut"
-            android:targetActivity="ContactsListActivity"
+            android:targetActivity=".activities.ContactSelectionActivity"
             android:label="@string/shortcutMessageContact"
             android:icon="@drawable/ic_launcher_shortcut_directmessage">
 
@@ -382,12 +392,6 @@
                 <data android:mimeType="vnd.android.cursor.item/contact" android:host="com.android.contacts" />
                 <data android:mimeType="vnd.android.cursor.item/raw_contact" android:host="com.android.contacts" />
             </intent-filter>
-        </activity>
-
-        <!-- Shows the List and Details in two panes. This is probably temporary -->
-        <activity android:name=".activities.TwoPaneActivity"
-            android:label="Contacts Goop"
-            android:theme="@style/TallTitleBarTheme">
         </activity>
 
         <!-- Create a new or edit an existing contact -->
@@ -450,10 +454,10 @@
             android:theme="@android:style/Theme.Translucent">
         </activity>
 
-        <!-- Makes .ContactsListActivity the search target for any activity in Contacts -->
+        <!-- Makes .ContactListActivity the search target for any activity in Contacts -->
         <meta-data
             android:name="android.app.default_searchable"
-            android:value=".ContactsListActivity" />
+            android:value=".activities.ContactListActivity" />
 
 
         <!-- LIVE FOLDERS -->
